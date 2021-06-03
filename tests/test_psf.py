@@ -230,8 +230,24 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         # Test how well we can subtract the PSF model
         self.subtractStars(self.exposure, self.catalog, chi_lim=5.6)
 
-        # Test PiffPsf.computeBBox
-        self.assertEqual(psf.computeBBox(), psf.computeKernelImage().getBBox())
+        # Test bboxes
+        for point in [
+            psf.getAveragePosition(),
+            geom.Point2D(),
+            geom.Point2D(1, 1)
+        ]:
+            self.assertEqual(
+                psf.computeBBox(point),
+                psf.computeKernelImage(point).getBBox()
+            )
+            self.assertEqual(
+                psf.computeKernelBBox(point),
+                psf.computeKernelImage(point).getBBox()
+            )
+            self.assertEqual(
+                psf.computeImageBBox(point),
+                psf.computeImage(point).getBBox()
+            )
 
         # Some roundtrips
         with lsst.utils.tests.getTempFilePath(".fits") as tmpFile:
