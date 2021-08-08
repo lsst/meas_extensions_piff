@@ -21,13 +21,10 @@
 
 __all__ = ["PiffPsfDeterminerConfig", "PiffPsfDeterminerTask"]
 
-import logging
-
 import numpy as np
 import piff
 import galsim
 
-import lsst.log
 import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
@@ -175,6 +172,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
     """A measurePsfTask PSF estimator using Piff as the implementation.
     """
     ConfigClass = PiffPsfDeterminerConfig
+    _DefaultName = "psfDeterminer.Piff"
 
     def determinePsf(
         self, exposure, psfCandidateList, metadata=None, flagKey=None
@@ -255,10 +253,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         wcs = {0: galsim.PixelScale(1.0)}
         pointing = None
 
-        logger = logging.getLogger(self.log.getName()+".Piff")
-        logger.addHandler(lsst.log.LogHandler())
-
-        piffResult.fit(stars, wcs, pointing, logger=logger)
+        piffResult.fit(stars, wcs, pointing, logger=self.log)
         psf = PiffPsf(kernelSize, kernelSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
