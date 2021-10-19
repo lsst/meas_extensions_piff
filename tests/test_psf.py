@@ -226,6 +226,13 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         self.assertEqual(len(psfCandidateList), metadata['numAvailStars'])
         self.assertEqual(sum(self.catalog['use_psf']), metadata['numGoodStars'])
+        self.assertEqual(
+            psf.getAveragePosition(),
+            geom.Point2D(
+                np.mean([s.x for s in psf._piffResult.stars]),
+                np.mean([s.y for s in psf._piffResult.stars])
+            )
+        )
 
         # Test how well we can subtract the PSF model
         self.subtractStars(self.exposure, self.catalog, chi_lim=5.6)
