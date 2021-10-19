@@ -275,10 +275,11 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                         psf.computeImage(point),
                         newIm.getPsf().computeImage(point)
                     )
-                # Also check using default position
+                # Also check average position
+                newPsf = newIm.getPsf()
                 self.assertImagesAlmostEqual(
-                    psf.computeImage(),
-                    newIm.getPsf().computeImage()
+                    psf.computeImage(psf.getAveragePosition()),
+                    newPsf.computeImage(newPsf.getAveragePosition())
                 )
 
 
