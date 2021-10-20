@@ -24,7 +24,7 @@ import numpy as np
 from lsst.afw.typehandling import StorableHelperFactory
 from lsst.meas.algorithms import ImagePsf
 from lsst.afw.image import Image
-from lsst.geom import Box2I, Point2I, Extent2I
+from lsst.geom import Box2I, Point2I, Extent2I, Point2D
 
 
 class PiffPsf(ImagePsf):
@@ -40,6 +40,7 @@ class PiffPsf(ImagePsf):
         self.height = height
         self.dimensions = Extent2I(width, height)
         self._piffResult = piffResult
+        self._averagePosition = None
 
     @property
     def piffResult(self):
@@ -80,6 +81,13 @@ class PiffPsf(ImagePsf):
 
     def _doComputeBBox(self, position, color):
         return self._doBBox(Point2I(0, 0), center=True)
+
+    def getAveragePosition(self):
+        if self._averagePosition is None:
+            x = np.mean([star.field_pos.x for star in self._piffResult.stars])
+            y = np.mean([star.field_pos.y for star in self._piffResult.stars])
+            self._averagePosition = Point2D(x, y)
+        return self._averagePosition
 
     # Internal private methods
 
