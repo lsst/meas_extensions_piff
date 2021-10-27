@@ -69,6 +69,9 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
 def computeWeight(maskedImage, maxSNR):
     """Derive a weight map without Poisson variance component due to signal.
 
+    See also
+    `lsst.meas.algorithms.variance_plance.remove_signal_from_variance`.
+
     Parameters
     ----------
     maskedImage : `afw.image.MaskedImage`
