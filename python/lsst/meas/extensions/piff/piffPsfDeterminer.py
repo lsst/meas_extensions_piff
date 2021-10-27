@@ -173,6 +173,12 @@ def computeWeight(maskedImage, maxSNR, good):
     -------
     weightArr : `ndarry`
         Array to use for weight.
+
+    See Also
+    --------
+    `lsst.meas.algorithms.variance_plance.remove_signal_from_variance` :
+        Remove the Poisson contribution from sources in the variance plane of
+        an Exposure.
     """
     imArr = maskedImage.image.array
     varArr = maskedImage.variance.array
