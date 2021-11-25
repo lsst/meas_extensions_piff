@@ -265,11 +265,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     source.set(flagKey, True)
 
         if metadata is not None:
-            metadata.set("spatialFitChi2", piffResult.chisq)
-            metadata.set("numAvailStars", len(stars))
-            metadata.set("numGoodStars", len(piffResult.stars))
-            metadata.set("avgX", np.mean([p.x for p in piffResult.stars]))
-            metadata.set("avgY", np.mean([p.y for p in piffResult.stars]))
+            metadata["spatialFitChi2"] = piffResult.chisq
+            metadata["numAvailStars"] = len(stars)
+            metadata["numGoodStars"] = len(piffResult.stars)
+            metadata["avgX"] = np.mean([p.x for p in piffResult.stars])
+            metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
         return psf, None
 
