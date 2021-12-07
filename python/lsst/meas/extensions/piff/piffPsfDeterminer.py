@@ -59,6 +59,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         dtype=float,
         default=200.0
     )
+    zeroWeightMaskBits = pexConfig.ListField(
+        doc="List of mask bits for which to set pixel weights to zero.",
+        dtype=str,
+        default=['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
+    )
 
     def setDefaults(self):
         self.kernelSize = 21
@@ -66,7 +71,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         self.kernelSizeMax = 35
 
 
-def computeWeight(maskedImage, maxSNR):
+def computeWeight(maskedImage, maxSNR, zeroWeightMaskBits):
     """Derive a weight map without Poisson variance component due to signal.
 
     Parameters
@@ -75,6 +80,8 @@ def computeWeight(maskedImage, maxSNR):
         PSF candidate postage stamp
     maxSNR : `float`
         Maximum SNR applying variance floor.
+    zeroWeightMaskBits : `List[str]`
+        List of mask bits for which to set pixel weights to zero.
 
     Returns
     -------
@@ -83,7 +90,13 @@ def computeWeight(maskedImage, maxSNR):
     """
     imArr = maskedImage.image.array
     varArr = maskedImage.variance.array
-    good = (varArr != 0) & np.isfinite(varArr) & np.isfinite(imArr)
+    bitmask = maskedImage.mask.getPlaneBitMask(zeroWeightMaskBits)
+    good = (
+        (varArr != 0)
+        & (np.isfinite(varArr))
+        & (np.isfinite(imArr))
+        & ((maskedImage.mask.array & bitmask) == 0)
+    )
 
     # Fit a straight line to variance vs (sky-subtracted) signal.
     # The evaluate that line at zero signal to get an estimate of the
@@ -202,7 +215,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         stars = []
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage()
-            weight = computeWeight(cmi, self.config.maxSNR)
+            weight = computeWeight(
+                cmi,
+                self.config.maxSNR,
+                self.config.zeroWeightMaskBits
+            )
 
             bbox = cmi.getBBox()
             bds = galsim.BoundsI(
