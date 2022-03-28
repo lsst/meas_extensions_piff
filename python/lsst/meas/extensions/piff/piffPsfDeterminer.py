@@ -64,6 +64,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         dtype=str,
         default=['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
     )
+    minimumUnmaskedFraction = pexConfig.Field(
+        doc="Minimum fraction of unmasked pixels required to use star.",
+        dtype=float,
+        default=0.5
+    )
 
     def setDefaults(self):
         self.kernelSize = 21
@@ -71,22 +76,20 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         self.kernelSizeMax = 35
 
 
-def computeWeight(maskedImage, maxSNR, zeroWeightMaskBits):
-    """Derive a weight map without Poisson variance component due to signal.
+def getGoodPixels(maskedImage, zeroWeightMaskBits):
+    """Compute an index array indicating good pixels to use.
 
     Parameters
     ----------
     maskedImage : `afw.image.MaskedImage`
         PSF candidate postage stamp
-    maxSNR : `float`
-        Maximum SNR applying variance floor.
     zeroWeightMaskBits : `List[str]`
         List of mask bits for which to set pixel weights to zero.
 
     Returns
     -------
-    weightArr : `ndarry`
-        Array to use for weight.
+    good : `ndarray`
+        Index array indicating good pixels.
     """
     imArr = maskedImage.image.array
     varArr = maskedImage.variance.array
@@ -97,6 +100,28 @@ def computeWeight(maskedImage, maxSNR, zeroWeightMaskBits):
         & (np.isfinite(imArr))
         & ((maskedImage.mask.array & bitmask) == 0)
     )
+    return good
+
+
+def computeWeight(maskedImage, maxSNR, good):
+    """Derive a weight map without Poisson variance component due to signal.
+
+    Parameters
+    ----------
+    maskedImage : `afw.image.MaskedImage`
+        PSF candidate postage stamp
+    maxSNR : `float`
+        Maximum SNR applying variance floor.
+    good : `ndarray`
+        Index array indicating good pixels.
+
+    Returns
+    -------
+    weightArr : `ndarry`
+        Array to use for weight.
+    """
+    imArr = maskedImage.image.array
+    varArr = maskedImage.variance.array
 
     # Fit a straight line to variance vs (sky-subtracted) signal.
     # The evaluate that line at zero signal to get an estimate of the
@@ -164,7 +189,7 @@ def _computeWeightAlternative(maskedImage, maxSNR):
     This version is equivalent to that used by Piff internally.  The weight map
     it produces tends to leave a residual when removing the Poisson component
     due to the signal.  We leave it here as a reference, but without intending
-    that it be used.
+    that it be used (or be maintained).
     """
     imArr = maskedImage.image.array
     varArr = maskedImage.variance.array
@@ -215,11 +240,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         stars = []
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage()
-            weight = computeWeight(
-                cmi,
-                self.config.maxSNR,
-                self.config.zeroWeightMaskBits
-            )
+            good = getGoodPixels(cmi, self.config.zeroWeightMaskBits)
+            fracGood = np.sum(good)/good.size
+            if fracGood < self.config.minimumUnmaskedFraction:
+                continue
+            weight = computeWeight(cmi, self.config.maxSNR, good)
 
             bbox = cmi.getBBox()
             bds = galsim.BoundsI(
