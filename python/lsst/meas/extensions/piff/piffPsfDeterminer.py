@@ -96,10 +96,14 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default="Lanczos(11)",
     )
 
-    def setDefaults(self):
-        self.kernelSize = 21
-        self.kernelSizeMin = 11
-        self.kernelSizeMax = 35
+    kernelSize = pexConfig.RangeField(
+        doc="Size of PSF fitting kernel in pixels",
+        dtype=int,
+        default=21,
+        min=11,
+        max=35,
+        inclusiveMax=True
+    )
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
@@ -263,12 +267,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        kernelSize = int(np.clip(
-            self.config.kernelSize,
-            self.config.kernelSizeMin,
-            self.config.kernelSizeMax
-        ))
-        self._validatePsfCandidates(psfCandidateList, kernelSize, self.config.samplingSize)
+        self._validatePsfCandidates(psfCandidateList, self.config.kernelSize, self.config.samplingSize)
 
         stars = []
         for candidate in psfCandidateList:
@@ -304,7 +303,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': self.config.samplingSize,
-                'size': kernelSize,
+                'size': kernelSize
                 'interp': self.config.interpolant
             },
             'interp': {
