@@ -304,9 +304,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff with a psf kernelSize of 27."""
         self.checkPiffDeterminer(27)
 
-    def test_validatePsfCandidates(self):
+    @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
+    def test_validatePsfCandidates(self, samplingSize):
         """Test that `_validatePsfCandidates` raises for too-small candidates.
         """
+        drawSizeDict = {1.0: 27,
+                        0.9: 31,
+                        1.1: 25,
+                        }
+
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
         makePsfCandidatesConfig.kernelSize = 24
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
@@ -316,14 +322,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ).psfCandidates
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.kernelSize = 25
+        psfDeterminerConfig.kernelSize = 27
+        psfDeterminerConfig.samplingSize = samplingSize
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
+
         with self.assertRaisesRegex(RuntimeError,
-                                    "config.kernelSize=25 pixels per side; found 24x24"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 25)
+                                    f"config.kernelSize/config.samplingSize={drawSizeDict[samplingSize]} "
+                                    "pixels per side; found 24x24"):
+            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27, samplingSize)
 
         # This should not raise.
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 23)
+        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21, samplingSize)
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
