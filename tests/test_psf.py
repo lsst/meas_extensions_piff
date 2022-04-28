@@ -12,7 +12,7 @@ import lsst.daf.base as dafBase
 import lsst.geom as geom
 import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
-import lsst.meas.extensions.piff.piffPsfDeterminer  # noqa
+from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -157,8 +157,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             cand = measAlg.makePsfCandidate(source, self.exposure)
             self.cellSet.insertCandidate(cand)
 
-    def setupDeterminer(self, exposure):
-        """Setup the starSelector and psfDeterminer"""
+    def setupDeterminer(self, kernelSize=None):
+        """Setup the starSelector and psfDeterminer
+
+        Parameters
+        ----------
+        kernelSize : `int`, optional
+            Set ``config.kernelSize`` to this, if not None.
+        """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
         starSelectorConfig.sourceFluxField = "base_GaussianFlux_instFlux"
@@ -173,14 +179,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
-        self.makePsfCandidates = measAlg.MakePsfCandidatesTask()
+        makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
+        if kernelSize is not None:
+            makePsfCandidatesConfig.kernelSize = kernelSize
+        self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
-        psfDeterminerClass = measAlg.psfDeterminerRegistry["piff"]
-        psfDeterminerConfig = psfDeterminerClass.ConfigClass()
-        width, height = exposure.getMaskedImage().getDimensions()
+        psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
+        if kernelSize is not None:
+            psfDeterminerConfig.kernelSize = kernelSize
 
-        self.psfDeterminer = psfDeterminerClass(psfDeterminerConfig)
+        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
     def subtractStars(self, exposure, catalog, chi_lim=-1):
         """Subtract the exposure's PSF from all the sources in catalog"""
@@ -205,10 +214,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertGreater(chi_min, -chi_lim)
             self.assertLess(chi_max, chi_lim)
 
-    def testPiffDeterminer(self):
-        """Test the (Piff) psfDeterminer on subImages"""
+    def checkPiffDeterminer(self, kernelSize=None):
+        """Configure PiffPsfDeterminerTask and run basic tests on it.
 
-        self.setupDeterminer(self.exposure)
+        Parameters
+        ----------
+        kernelSize : `int`, optional
+            Set ``config.kernelSize`` to this, if not None.
+        """
+        self.setupDeterminer(kernelSize=kernelSize)
         metadata = dafBase.PropertyList()
 
         stars = self.starSelector.run(self.catalog, exposure=self.exposure)
@@ -281,6 +295,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                     psf.computeImage(psf.getAveragePosition()),
                     newPsf.computeImage(newPsf.getAveragePosition())
                 )
+
+    def testPiffDeterminer_default(self):
+        """Test piff with the default config."""
+        self.checkPiffDeterminer()
+
+    def testPiffDeterminer_kernelSize27(self):
+        """Test Piff with a psf kernelSize of 27."""
+        self.checkPiffDeterminer(27)
 
     def test_validatePsfCandidates(self):
         """Test that `_validatePsfCandidates` raises for too-small candidates.
