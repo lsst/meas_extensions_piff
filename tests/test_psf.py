@@ -320,13 +320,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
         with self.assertRaisesRegex(RuntimeError,
                                     "config.kernelSize=25 pixels per side; found 24x24"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList)
+            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 25)
 
         # This should not raise.
-        psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.kernelSize = 23
-        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList)
+        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 23)
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):

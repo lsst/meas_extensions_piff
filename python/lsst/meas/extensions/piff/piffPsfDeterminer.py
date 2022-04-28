@@ -237,7 +237,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        self._validatePsfCandidates(psfCandidateList)
+        kernelSize = int(np.clip(
+            self.config.kernelSize,
+            self.config.kernelSizeMin,
+            self.config.kernelSizeMax
+        ))
+        self._validatePsfCandidates(psfCandidateList, kernelSize)
 
         stars = []
         for candidate in psfCandidateList:
@@ -267,12 +272,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 weight=gsWeight
             )
             stars.append(piff.Star(data, None))
-
-        kernelSize = int(np.clip(
-            self.config.kernelSize,
-            self.config.kernelSizeMin,
-            self.config.kernelSizeMax
-        ))
 
         piffConfig = {
             'type': "Simple",
@@ -317,13 +316,15 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         return psf, None
 
-    def _validatePsfCandidates(self, psfCandidateList):
+    def _validatePsfCandidates(self, psfCandidateList, kernelSize):
         """Raise if psfCandidates are smaller than the configured kernelSize.
 
         Parameters
         ----------
         psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
             Sequence of psf candidates to check.
+        kernelSize : `int`
+            Size of image model to use in PIFF.
 
         Raises
         ------
@@ -332,10 +333,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             config.kernelSize.
         """
         for candidate in psfCandidateList:
-            if (candidate.getHeight() < self.config.kernelSize
-                    or candidate.getWidth() < self.config.kernelSize):
-                raise RuntimeError("PSF candidates must be at least config.kernelSize"
-                                   f"={self.config.kernelSize} pixels per side; "
+            if (candidate.getHeight() < kernelSize
+                    or candidate.getWidth() < kernelSize):
+                raise RuntimeError("PSF candidates must be at least config.kernelSize="
+                                   f"{kernelSize} pixels per side; "
                                    f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 
 
