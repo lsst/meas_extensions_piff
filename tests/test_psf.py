@@ -282,6 +282,30 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                     newPsf.computeImage(newPsf.getAveragePosition())
                 )
 
+    def test_validatePsfCandidates(self):
+        """Test that `_validatePsfCandidates` raises for too-small candidates.
+        """
+        makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
+        makePsfCandidatesConfig.kernelSize = 24
+        self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
+        psfCandidateList = self.makePsfCandidates.run(
+            self.catalog,
+            exposure=self.exposure
+        ).psfCandidates
+
+        psfDeterminerConfig = PiffPsfDeterminerConfig()
+        psfDeterminerConfig.kernelSize = 25
+        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
+        with self.assertRaisesRegex(RuntimeError,
+                                    "config.kernelSize=25 pixels per side; found 24x24"):
+            self.psfDeterminer._validatePsfCandidates(psfCandidateList)
+
+        # This should not raise.
+        psfDeterminerConfig = PiffPsfDeterminerConfig()
+        psfDeterminerConfig.kernelSize = 23
+        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
+        self.psfDeterminer._validatePsfCandidates(psfCandidateList)
+
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass

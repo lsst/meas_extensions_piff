@@ -237,6 +237,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+        self._validatePsfCandidates(psfCandidateList)
+
         stars = []
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage()
@@ -314,6 +316,27 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
         return psf, None
+
+    def _validatePsfCandidates(self, psfCandidateList):
+        """Raise if psfCandidates are smaller than the configured kernelSize.
+
+        Parameters
+        ----------
+        psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
+            Sequence of psf candidates to check.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if any psfCandidate has width or height smaller than
+            config.kernelSize.
+        """
+        for candidate in psfCandidateList:
+            if (candidate.getHeight() < self.config.kernelSize
+                    or candidate.getWidth() < self.config.kernelSize):
+                raise RuntimeError("PSF candidates must be at least config.kernelSize"
+                                   f"={self.config.kernelSize} pixels per side; "
+                                   f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
