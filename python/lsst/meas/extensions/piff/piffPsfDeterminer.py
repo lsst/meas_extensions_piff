@@ -332,12 +332,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             Raised if any psfCandidate has width or height smaller than
             config.kernelSize.
         """
-        for candidate in psfCandidateList:
-            if (candidate.getHeight() < kernelSize
-                    or candidate.getWidth() < kernelSize):
-                raise RuntimeError("PSF candidates must be at least config.kernelSize="
-                                   f"{kernelSize} pixels per side; "
-                                   f"found {candidate.getWidth()}x{candidate.getHeight()}.")
+        # We can assume all candidates have the same dimensions.
+        candidate = psfCandidateList[0]
+        if (candidate.getHeight() < kernelSize
+                or candidate.getWidth() < kernelSize):
+            raise RuntimeError("PSF candidates must be at least config.kernelSize="
+                               f"{kernelSize} pixels per side; "
+                               f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
