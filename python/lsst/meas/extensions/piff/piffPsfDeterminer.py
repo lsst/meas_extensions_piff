@@ -237,6 +237,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+        kernelSize = int(np.clip(
+            self.config.kernelSize,
+            self.config.kernelSizeMin,
+            self.config.kernelSizeMax
+        ))
+        self._validatePsfCandidates(psfCandidateList, kernelSize)
+
         stars = []
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage()
@@ -265,12 +272,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 weight=gsWeight
             )
             stars.append(piff.Star(data, None))
-
-        kernelSize = int(np.clip(
-            self.config.kernelSize,
-            self.config.kernelSizeMin,
-            self.config.kernelSizeMax
-        ))
 
         piffConfig = {
             'type': "Simple",
@@ -314,6 +315,30 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
         return psf, None
+
+    def _validatePsfCandidates(self, psfCandidateList, kernelSize):
+        """Raise if psfCandidates are smaller than the configured kernelSize.
+
+        Parameters
+        ----------
+        psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
+            Sequence of psf candidates to check.
+        kernelSize : `int`
+            Size of image model to use in PIFF.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if any psfCandidate has width or height smaller than
+            config.kernelSize.
+        """
+        # We can assume all candidates have the same dimensions.
+        candidate = psfCandidateList[0]
+        if (candidate.getHeight() < kernelSize
+                or candidate.getWidth() < kernelSize):
+            raise RuntimeError("PSF candidates must be at least config.kernelSize="
+                               f"{kernelSize} pixels per side; "
+                               f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
