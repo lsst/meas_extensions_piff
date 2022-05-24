@@ -242,7 +242,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             self.config.kernelSizeMin,
             self.config.kernelSizeMax
         ))
-        self._validatePsfCandidates(psfCandidateList, kernelSize)
+        self._validatePsfCandidates(psfCandidateList, kernelSize, self.config.samplingSize)
 
         stars = []
         for candidate in psfCandidateList:
@@ -297,7 +297,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         pointing = None
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
-        psf = PiffPsf(kernelSize, kernelSize, piffResult)
+        drawSize = 2*np.floor(0.5*kernelSize/self.config.samplingSize) + 1
+        psf = PiffPsf(drawSize, drawSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
         if flagKey:
@@ -316,7 +317,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         return psf, None
 
-    def _validatePsfCandidates(self, psfCandidateList, kernelSize):
+    def _validatePsfCandidates(self, psfCandidateList, kernelSize, samplingSize):
         """Raise if psfCandidates are smaller than the configured kernelSize.
 
         Parameters
@@ -325,6 +326,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             Sequence of psf candidates to check.
         kernelSize : `int`
             Size of image model to use in PIFF.
+        samplingSize : `float`
+            Resolution of the internal PSF model relative to the pixel size.
 
         Raises
         ------
@@ -334,10 +337,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         """
         # We can assume all candidates have the same dimensions.
         candidate = psfCandidateList[0]
-        if (candidate.getHeight() < kernelSize
-                or candidate.getWidth() < kernelSize):
-            raise RuntimeError("PSF candidates must be at least config.kernelSize="
-                               f"{kernelSize} pixels per side; "
+        drawSize = int(2*np.floor(0.5*kernelSize/samplingSize) + 1)
+        if (candidate.getHeight() < drawSize
+                or candidate.getWidth() < drawSize):
+            raise RuntimeError("PSF candidates must be at least config.kernelSize/config.samplingSize="
+                               f"{drawSize} pixels per side; "
                                f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 
 
