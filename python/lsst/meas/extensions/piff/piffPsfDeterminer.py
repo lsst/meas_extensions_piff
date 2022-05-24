@@ -93,7 +93,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
             "galsim.Quintic, and galsim.SincInterpolant.",
         dtype=str,
         check=_validateGalsimInterpolant,
-        default="Lanczos(3)",
+        default="Lanczos(11)",
     )
 
     def setDefaults(self):

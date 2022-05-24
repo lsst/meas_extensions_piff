@@ -249,7 +249,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         )
 
         # Test how well we can subtract the PSF model
-        self.subtractStars(self.exposure, self.catalog, chi_lim=5.6)
+        self.subtractStars(self.exposure, self.catalog, chi_lim=6.1)
 
         # Test bboxes
         for point in [
