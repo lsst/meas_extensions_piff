@@ -24,6 +24,7 @@ __all__ = ["PiffPsfDeterminerConfig", "PiffPsfDeterminerTask"]
 import numpy as np
 import piff
 import galsim
+import re
 
 import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
@@ -32,6 +33,22 @@ from .piffPsf import PiffPsf
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
+    def _validateGalsimInterpolant(name: str) -> bool:  # noqa: N805
+        """A helper function to validate the GalSim interpolant at config time.
+        """
+        # First, check if ``name`` is a valid Lanczos interpolant.
+        for pattern in (re.compile(r"Lanczos\(\d+\)"), re.compile(r"galsim.Lanczos\(\d+\)"),):
+            match = re.match(pattern, name)  # Search from the start of the string.
+            if match is not None:
+                # Check that the pattern is also the end of the string.
+                return match.end() == len(name)
+
+        # If not, check if ``name`` is any other valid GalSim interpolant.
+        names = {"galsim.{interp}" for interp in
+                 ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
+                 }
+        return name in names
+
     spatialOrder = pexConfig.Field(
         doc="specify spatial order for PSF kernel creation",
         dtype=int,
@@ -68,6 +85,15 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         doc="Minimum fraction of unmasked pixels required to use star.",
         dtype=float,
         default=0.5
+    )
+    interpolant = pexConfig.Field(
+        doc="GalSim interpolant name for Piff to use. "
+            "Options include 'Lanczos(N)', where N is an integer, along with "
+            "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
+            "galsim.Quintic, and galsim.SincInterpolant.",
+        dtype=str,
+        check=_validateGalsimInterpolant,
+        default="Lanczos(11)",
     )
 
     def setDefaults(self):
@@ -278,7 +304,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': self.config.samplingSize,
-                'size': kernelSize
+                'size': kernelSize,
+                'interp': self.config.interpolant
             },
             'interp': {
                 'type': 'BasisPolynomial',
