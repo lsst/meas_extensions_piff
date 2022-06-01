@@ -157,13 +157,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             cand = measAlg.makePsfCandidate(source, self.exposure)
             self.cellSet.insertCandidate(cand)
 
-    def setupDeterminer(self, kernelSize=None):
+    def setupDeterminer(self, stampSize=None, samplingSize=None):
         """Setup the starSelector and psfDeterminer
 
         Parameters
         ----------
-        kernelSize : `int`, optional
-            Set ``config.kernelSize`` to this, if not None.
+        stampSize : `int`, optional
+            Set ``config.stampSize`` to this, if not None.
+        samplingSize : `float`, optional
+            Set ``config.samplingSize`` to this, if not None.
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -180,14 +182,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        if kernelSize is not None:
-            makePsfCandidatesConfig.kernelSize = kernelSize
+        if stampSize is not None:
+            makePsfCandidatesConfig.kernelSize = stampSize
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
-        if kernelSize is not None:
-            psfDeterminerConfig.kernelSize = kernelSize
+        if stampSize is not None:
+            psfDeterminerConfig.stampSize = stampSize
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -214,15 +216,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertGreater(chi_min, -chi_lim)
             self.assertLess(chi_max, chi_lim)
 
-    def checkPiffDeterminer(self, kernelSize=None):
+    def checkPiffDeterminer(self, stampSize=None, samplingSize=None):
         """Configure PiffPsfDeterminerTask and run basic tests on it.
 
         Parameters
         ----------
-        kernelSize : `int`, optional
-            Set ``config.kernelSize`` to this, if not None.
+        stampSize : `int`, optional
+            Set ``config.stampSize`` to this, if not None.
+        samplingSize : `float`, optional
+            Set ``config.samplingSize`` to this, if not None.
         """
-        self.setupDeterminer(kernelSize=kernelSize)
+        self.setupDeterminer(stampSize=stampSize)
         metadata = dafBase.PropertyList()
 
         stars = self.starSelector.run(self.catalog, exposure=self.exposure)
@@ -300,9 +304,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test piff with the default config."""
         self.checkPiffDeterminer()
 
-    def testPiffDeterminer_kernelSize27(self):
-        """Test Piff with a psf kernelSize of 27."""
-        self.checkPiffDeterminer(27)
+    def testPiffDeterminer_stampSize27(self):
+        """Test Piff with a psf stampSize of 27."""
+        self.checkPiffDeterminer(stampSize=27)
+
+    def testPiffDeterminer_2x_oversampled(self):
+        """Test Piff with a samplingSize of 0.5, i.e. oversampling by 2x.
+        """
+        self.checkPiffDeterminer(samplingSize=0.5)
 
     def testComputeDrawSize(self):
         self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(21, 1), 21)

@@ -32,7 +32,7 @@ from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from .piffPsf import PiffPsf
 
 
-class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
+class PiffPsfDeterminerConfig(pexConfig.Config):
     def _validateGalsimInterpolant(name: str) -> bool:  # noqa: N805
         """A helper function to validate the GalSim interpolant at config time.
         """
@@ -49,6 +49,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
                  }
         return name in names
 
+    stampSize = pexConfig.Field(
+        doc="Size of PSF stamps used in PIFF, in native pixels.",
+        dtype=int,
+        default=21,
+    )
     spatialOrder = pexConfig.Field(
         doc="specify spatial order for PSF kernel creation",
         dtype=int,
@@ -95,14 +100,20 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
-
-    kernelSize = pexConfig.RangeField(
-        doc="Size of PSF fitting kernel in pixels",
-        dtype=int,
-        default=21,
-        min=11,
-        max=35,
-        inclusiveMax=True
+    kernelSize = pexConfig.Field(
+        doc="Unused: use stampSize to set the extent of the PIFF PSF model.",
+        deprecated="This field is unused and will be removed in v25; see stampSize.",
+        dtype=int
+    )
+    kernelSizeMin = pexConfig.Field(
+        doc="Unused: use stampSize to set the extent of the PIFF PSF model.",
+        deprecated="This field is unused and will be removed in v25; see stampSize.",
+        dtype=int
+    )
+    kernelSizeMax = pexConfig.Field(
+        doc="Unused: use stampSize to set the extent of the PIFF PSF model.",
+        deprecated="This field is unused and will be removed in v25; see stampSize.",
+        dtype=int
     )
 
 
@@ -267,7 +278,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        drawSize = self._computeDrawSize(self.config.kernelSize, self.config.samplingSize)
+        drawSize = self._computeDrawSize(self.config.stampSize, self.config.samplingSize)
         self._validatePsfCandidates(psfCandidateList, drawSize)
 
         stars = []
@@ -304,7 +315,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': self.config.samplingSize,
-                'size': kernelSize
+                'size': self.config.stampSize,
                 'interp': self.config.interpolant
             },
             'interp': {
