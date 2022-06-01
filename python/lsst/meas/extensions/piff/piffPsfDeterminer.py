@@ -267,7 +267,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        self._validatePsfCandidates(psfCandidateList, self.config.kernelSize, self.config.samplingSize)
+        drawSize = self._computeDrawSize(self.config.kernelSize, self.config.samplingSize)
+        self._validatePsfCandidates(psfCandidateList, drawSize)
 
         stars = []
         for candidate in psfCandidateList:
@@ -323,7 +324,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         pointing = None
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
-        drawSize = 2*np.floor(0.5*kernelSize/self.config.samplingSize) + 1
         psf = PiffPsf(drawSize, drawSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
@@ -343,30 +343,32 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         return psf, None
 
-    def _validatePsfCandidates(self, psfCandidateList, kernelSize, samplingSize):
-        """Raise if psfCandidates are smaller than the configured kernelSize.
+    @classmethod
+    def _computeDrawSize(cls, stampSize, samplingSize):
+        """Return the size of the PSF image to be rendered (always odd)."""
+        return int(2*np.floor(0.5*stampSize/samplingSize) + 1)
+
+    def _validatePsfCandidates(self, psfCandidateList, drawSize):
+        """Raise if psfCandidates are smaller than the configured stampSize.
 
         Parameters
         ----------
         psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
             Sequence of psf candidates to check.
-        kernelSize : `int`
-            Size of image model to use in PIFF.
-        samplingSize : `float`
-            Resolution of the internal PSF model relative to the pixel size.
+        drawSize : `int`
+            Number of pixels in the postage stamp drawn by PIFF, not
+            necessarily at native pixel scale.
 
         Raises
         ------
         RuntimeError
             Raised if any psfCandidate has width or height smaller than
-            config.kernelSize.
+            config.stampSize.
         """
         # We can assume all candidates have the same dimensions.
         candidate = psfCandidateList[0]
-        drawSize = int(2*np.floor(0.5*kernelSize/samplingSize) + 1)
-        if (candidate.getHeight() < drawSize
-                or candidate.getWidth() < drawSize):
-            raise RuntimeError("PSF candidates must be at least config.kernelSize/config.samplingSize="
+        if (candidate.getHeight() < drawSize or candidate.getWidth() < drawSize):
+            raise RuntimeError("PSF candidates must be at least config.stampSize/config.samplingSize="
                                f"{drawSize} pixels per side; "
                                f"found {candidate.getWidth()}x{candidate.getHeight()}.")
 

@@ -304,15 +304,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff with a psf kernelSize of 27."""
         self.checkPiffDeterminer(27)
 
-    @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
-    def test_validatePsfCandidates(self, samplingSize):
+    def testComputeDrawSize(self):
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(21, 1), 21)
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(27, 1), 27)
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(27, 0.9), 31)
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(27, 1.1), 25)
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(27, 0.5), 55)
+        self.assertEqual(PiffPsfDeterminerTask._computeDrawSize(27, 2), 13)
+
+    def test_validatePsfCandidates(self):
         """Test that `_validatePsfCandidates` raises for too-small candidates.
         """
-        drawSizeDict = {1.0: 27,
-                        0.9: 31,
-                        1.1: 25,
-                        }
-
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
         makePsfCandidatesConfig.kernelSize = 24
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
@@ -322,17 +324,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ).psfCandidates
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.kernelSize = 27
-        psfDeterminerConfig.samplingSize = samplingSize
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
         with self.assertRaisesRegex(RuntimeError,
-                                    f"config.kernelSize/config.samplingSize={drawSizeDict[samplingSize]} "
-                                    "pixels per side; found 24x24"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27, samplingSize)
+                                    "config.stampSize/config.samplingSize=27 pixels per side; found 24x24"):
+            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27)
 
         # This should not raise.
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21, samplingSize)
+        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21)
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
