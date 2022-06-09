@@ -97,7 +97,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     )
 
     def setDefaults(self):
-        self.kernelSize = 21
+        # kernelSize should be at least 25 so that
+        # i) aperture flux with 12 pixel radius can be compared to PSF flux.
+        # ii) fake sources injected to match the 12 pixel aperture flux get
+        #     measured correctly
+        self.kernelSize = 25
         self.kernelSizeMin = 11
         self.kernelSizeMax = 35
 
