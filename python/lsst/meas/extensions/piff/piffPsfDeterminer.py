@@ -35,6 +35,23 @@ from .piffPsf import PiffPsf
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     def _validateGalsimInterpolant(name: str) -> bool:  # noqa: N805
         """A helper function to validate the GalSim interpolant at config time.
+
+        Parameters
+        ----------
+        name : str
+            The name of the interpolant to use from GalSim.  Valid options are:
+                Lancsos(N) where n is a positive integer
+                Linear
+                Cubic
+                Quintic
+                Delta
+                Nearest
+                SincInterpolant
+
+        Returns
+        -------
+        is_valid : bool
+            Whether the provided interpolant name is valid.
         """
         # First, check if ``name`` is a valid Lanczos interpolant.
         for pattern in (re.compile(r"Lanczos\(\d+\)"), re.compile(r"galsim.Lanczos\(\d+\)"),):
