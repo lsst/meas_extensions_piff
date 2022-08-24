@@ -80,3 +80,11 @@ Python API reference
 .. automodapi:: lsst.meas.extensions.piff
    :no-main-docstr:
    :no-inheritance-diagram:
+
+.. automodapi:: lsst.meas.extensions.piff.piffPsf
+   :no-main-docstr:
+   :no-inheritance-diagram:
+
+.. automodapi:: lsst.meas.extensions.piff.piffPsfDeterminer
+   :no-main-docstr:
+   :no-inheritance-diagram:
