@@ -44,14 +44,6 @@ Pipeline tasks
 .. lsst-pipelinetasks::
    :root: lsst.meas.extensions.piff
 
-.. _lsst.meas.extensions.piff-command-line-tasks:
-
-Command-line tasks
-------------------
-
-.. lsst-cmdlinetasks::
-   :root: lsst.meas.extensions.piff
-
 .. _lsst.meas.extensions.piff-tasks:
 
 Tasks
