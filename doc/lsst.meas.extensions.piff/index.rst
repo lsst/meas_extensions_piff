@@ -44,14 +44,6 @@ Pipeline tasks
 .. lsst-pipelinetasks::
    :root: lsst.meas.extensions.piff
 
-.. _lsst.meas.extensions.piff-command-line-tasks:
-
-Command-line tasks
-------------------
-
-.. lsst-cmdlinetasks::
-   :root: lsst.meas.extensions.piff
-
 .. _lsst.meas.extensions.piff-tasks:
 
 Tasks
@@ -86,5 +78,13 @@ Python API reference
 ====================
 
 .. automodapi:: lsst.meas.extensions.piff
+   :no-main-docstr:
+   :no-inheritance-diagram:
+
+.. automodapi:: lsst.meas.extensions.piff.piffPsf
+   :no-main-docstr:
+   :no-inheritance-diagram:
+
+.. automodapi:: lsst.meas.extensions.piff.piffPsfDeterminer
    :no-main-docstr:
    :no-inheritance-diagram:
