@@ -330,7 +330,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': self.config.samplingSize,
-                'size': kernelSize,
+                'size': stampSize,
                 'interp': self.config.interpolant
             },
             'interp': {
@@ -350,7 +350,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         pointing = None
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
-        drawSize = 2*np.floor(0.5*kernelSize/self.config.samplingSize) + 1
+        drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
         psf = PiffPsf(drawSize, drawSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
