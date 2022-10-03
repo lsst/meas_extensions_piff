@@ -285,12 +285,16 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        kernelSize = int(np.clip(
-            self.config.kernelSize,
-            self.config.kernelSizeMin,
-            self.config.kernelSizeMax
-        ))
-        self._validatePsfCandidates(psfCandidateList, kernelSize, self.config.samplingSize)
+        if self.config.stampSize:
+            stampSize = self.config.stampSize
+            if stampSize > psfCandidateList[0].getWidth():
+                self.log.warning("stampSize is larger than the PSF candidate size.  Using candidate size.")
+                stampSize = psfCandidateList[0].getWidth()
+        else:  # TODO: Only the if block should stay after DM-36311
+            self.log.debug("stampSize not set.  Using candidate size.")
+            stampSize = psfCandidateList[0].getWidth()
+
+        self._validatePsfCandidates(psfCandidateList, stampSize, self.config.samplingSize)
 
         stars = []
         for candidate in psfCandidateList:
