@@ -16,6 +16,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
+from lsst.pex.config import FieldValidationError
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -160,13 +161,13 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             cand = measAlg.makePsfCandidate(source, self.exposure)
             self.cellSet.insertCandidate(cand)
 
-    def setupDeterminer(self, kernelSize=None):
+    def setupDeterminer(self, stampSize=None):
         """Setup the starSelector and psfDeterminer
 
         Parameters
         ----------
-        kernelSize : `int`, optional
-            Set ``config.kernelSize`` to this, if not None.
+        stampSize : `int`, optional
+            Set ``config.stampSize`` to this, if not None.
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -183,14 +184,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        if kernelSize is not None:
-            makePsfCandidatesConfig.kernelSize = kernelSize
+        if stampSize is not None:
+            makePsfCandidatesConfig.kernelSize = stampSize
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
-        if kernelSize is not None:
-            psfDeterminerConfig.kernelSize = kernelSize
+        if stampSize is not None:
+            psfDeterminerConfig.stampSize = stampSize
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -217,15 +218,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertGreater(chi_min, -chi_lim)
             self.assertLess(chi_max, chi_lim)
 
-    def checkPiffDeterminer(self, kernelSize=None):
+    def checkPiffDeterminer(self, stampSize=None):
         """Configure PiffPsfDeterminerTask and run basic tests on it.
 
         Parameters
         ----------
-        kernelSize : `int`, optional
-            Set ``config.kernelSize`` to this, if not None.
+        stampSize : `int`, optional
+            Set ``config.stampSize`` to this, if not None.
         """
-        self.setupDeterminer(kernelSize=kernelSize)
+        self.setupDeterminer(stampSize=stampSize)
         metadata = dafBase.PropertyList()
 
         stars = self.starSelector.run(self.catalog, exposure=self.exposure)
@@ -310,6 +311,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
     def test_validatePsfCandidates(self, samplingSize):
         """Test that `_validatePsfCandidates` raises for too-small candidates.
+
+        This should be independent of the samplingSize parameter.
         """
         drawSizeDict = {1.0: 27,
                         0.9: 31,
@@ -317,7 +320,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                         }
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        makePsfCandidatesConfig.kernelSize = 24
+        makePsfCandidatesConfig.kernelSize = 23
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
         psfCandidateList = self.makePsfCandidates.run(
             self.catalog,
@@ -325,17 +328,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ).psfCandidates
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.kernelSize = 27
+        psfDeterminerConfig.stampSize = drawSizeDict[samplingSize]
         psfDeterminerConfig.samplingSize = samplingSize
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
         with self.assertRaisesRegex(RuntimeError,
-                                    f"config.kernelSize/config.samplingSize={drawSizeDict[samplingSize]} "
-                                    "pixels per side; found 24x24"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27, samplingSize)
+                                    "stampSize=27 "
+                                    "pixels per side; found 23x23"):
+            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27)
 
         # This should not raise.
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21, samplingSize)
+        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
@@ -359,6 +362,29 @@ class PiffConfigTestCase(lsst.utils.tests.TestCase):
             self.assertFalse(_validateGalsimInterpolant(interp))
             self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
             self.assertTrue(eval(f"galsim.{interp}"))
+
+    def testKernelSize(self):  # TODO: Remove this test in DM-36311.
+        config = PiffPsfDeterminerConfig()
+
+        # Setting both stampSize and kernelSize should raise an error.
+        config.stampSize = 27
+        with self.assertWarns(FutureWarning):
+            config.kernelSize = 25
+        self.assertRaises(FieldValidationError, config.validate)
+
+        # even if they agree with each other
+        config.stampSize = 31
+        with self.assertWarns(FutureWarning):
+            config.kernelSize = 31
+        self.assertRaises(FieldValidationError, config.validate)
+
+        # Setting stampSize and kernelSize should be valid, because if not
+        # set, stampSize is set to the size of PSF candidates internally.
+        # This is only a temporary behavior and should go away in DM-36311.
+        config.stampSize = None
+        with self.assertWarns(FutureWarning):
+            config.kernelSize = None
+        config.validate()
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
