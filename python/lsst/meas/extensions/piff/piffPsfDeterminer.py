@@ -61,7 +61,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
                 return match.end() == len(name)
 
         # If not, check if ``name`` is any other valid GalSim interpolant.
-        names = {"galsim.{interp}" for interp in
+        names = {f"galsim.{interp}" for interp in
                  ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
                  }
         return name in names
