@@ -32,40 +32,41 @@ from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from .piffPsf import PiffPsf
 
 
+def _validateGalsimInterpolant(name: str) -> bool:
+    """A helper function to validate the GalSim interpolant at config time.
+
+    Parameters
+    ----------
+    name : str
+        The name of the interpolant to use from GalSim.  Valid options are:
+            galsim.Lanczos(N) or Lancsos(N), where N is a positive integer
+            galsim.Linear
+            galsim.Cubic
+            galsim.Quintic
+            galsim.Delta
+            galsim.Nearest
+            galsim.SincInterpolant
+
+    Returns
+    -------
+    is_valid : bool
+        Whether the provided interpolant name is valid.
+    """
+    # First, check if ``name`` is a valid Lanczos interpolant.
+    for pattern in (re.compile(r"Lanczos\(\d+\)"), re.compile(r"galsim.Lanczos\(\d+\)"),):
+        match = re.match(pattern, name)  # Search from the start of the string.
+        if match is not None:
+            # Check that the pattern is also the end of the string.
+            return match.end() == len(name)
+
+    # If not, check if ``name`` is any other valid GalSim interpolant.
+    names = {f"galsim.{interp}" for interp in
+             ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
+             }
+    return name in names
+
+
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
-    def _validateGalsimInterpolant(name: str) -> bool:  # noqa: N805
-        """A helper function to validate the GalSim interpolant at config time.
-
-        Parameters
-        ----------
-        name : str
-            The name of the interpolant to use from GalSim.  Valid options are:
-                Lancsos(N) where n is a positive integer
-                Linear
-                Cubic
-                Quintic
-                Delta
-                Nearest
-                SincInterpolant
-
-        Returns
-        -------
-        is_valid : bool
-            Whether the provided interpolant name is valid.
-        """
-        # First, check if ``name`` is a valid Lanczos interpolant.
-        for pattern in (re.compile(r"Lanczos\(\d+\)"), re.compile(r"galsim.Lanczos\(\d+\)"),):
-            match = re.match(pattern, name)  # Search from the start of the string.
-            if match is not None:
-                # Check that the pattern is also the end of the string.
-                return match.end() == len(name)
-
-        # If not, check if ``name`` is any other valid GalSim interpolant.
-        names = {"galsim.{interp}" for interp in
-                 ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
-                 }
-        return name in names
-
     spatialOrder = pexConfig.Field(
         doc="specify spatial order for PSF kernel creation",
         dtype=int,

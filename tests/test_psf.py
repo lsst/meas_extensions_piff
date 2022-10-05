@@ -1,6 +1,8 @@
+import galsim  # noqa: F401
 import unittest
 import numpy as np
 import copy
+from galsim import Lanczos  # noqa: F401
 
 import lsst.utils.tests
 import lsst.afw.detection as afwDetection
@@ -13,6 +15,7 @@ import lsst.geom as geom
 import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
+from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -333,6 +336,29 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         # This should not raise.
         self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21, samplingSize)
+
+
+class PiffConfigTestCase(lsst.utils.tests.TestCase):
+    """A test case to check for valid Piff config"""
+    def testValidateGalsimInterpolant(self):
+        # Check that random strings are not valid interpolants.
+        self.assertFalse(_validateGalsimInterpolant("foo"))
+        # Check that the Lanczos order is an integer
+        self.assertFalse(_validateGalsimInterpolant("Lanczos(3.0"))
+        self.assertFalse(_validateGalsimInterpolant("Lanczos(-5.0"))
+        self.assertFalse(_validateGalsimInterpolant("Lanczos(N)"))
+        # Check for various valid Lanczos interpolants
+        for interp in ("Lanczos(4)", "galsim.Lanczos(7)"):
+            self.assertTrue(_validateGalsimInterpolant(interp))
+            self.assertFalse(_validateGalsimInterpolant(interp.lower()))
+            # Evaluating the string should succeed. This is how Piff does it.
+            self.assertTrue(eval(interp))
+        # Check that interpolation methods are case sensitive.
+        for interp in ("Linear", "Cubic", "Quintic", "Delta", "Nearest", "SincInterpolant"):
+            self.assertFalse(_validateGalsimInterpolant(f"galsim.{interp.lower()}"))
+            self.assertFalse(_validateGalsimInterpolant(interp))
+            self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
+            self.assertTrue(eval(f"galsim.{interp}"))
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
