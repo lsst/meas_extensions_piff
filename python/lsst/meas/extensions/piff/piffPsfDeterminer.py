@@ -39,13 +39,13 @@ def _validateGalsimInterpolant(name: str) -> bool:
     ----------
     name : str
         The name of the interpolant to use from GalSim.  Valid options are:
-            Lancsos(N) where n is a positive integer
-            Linear
-            Cubic
-            Quintic
-            Delta
-            Nearest
-            SincInterpolant
+            galsim.Lanczos(N) or Lancsos(N), where N is a positive integer
+            galsim.Linear
+            galsim.Cubic
+            galsim.Quintic
+            galsim.Delta
+            galsim.Nearest
+            galsim.SincInterpolant
 
     Returns
     -------
