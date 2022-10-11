@@ -298,7 +298,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         stars = []
         for candidate in psfCandidateList:
-            cmi = candidate.getMaskedImage()
+            cmi = candidate.getMaskedImage(stampSize, stampSize)
             good = getGoodPixels(cmi, self.config.zeroWeightMaskBits)
             fracGood = np.sum(good)/good.size
             if fracGood < self.config.minimumUnmaskedFraction:
