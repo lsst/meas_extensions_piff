@@ -294,7 +294,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             self.log.debug("stampSize not set.  Using candidate size.")
             stampSize = psfCandidateList[0].getWidth()
 
-        self._validatePsfCandidates(psfCandidateList, stampSize, self.config.samplingSize)
+        self._validatePsfCandidates(psfCandidateList, stampSize)
 
         stars = []
         for candidate in psfCandidateList:
@@ -370,32 +370,31 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         return psf, None
 
-    def _validatePsfCandidates(self, psfCandidateList, kernelSize, samplingSize):
+    # TODO: DM-36311: This method can be removed.
+    @staticmethod
+    def _validatePsfCandidates(psfCandidateList, stampSize):
         """Raise if psfCandidates are smaller than the configured kernelSize.
 
         Parameters
         ----------
         psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
             Sequence of psf candidates to check.
-        kernelSize : `int`
+        stampSize : `int`
             Size of image model to use in PIFF.
-        samplingSize : `float`
-            Resolution of the internal PSF model relative to the pixel size.
 
         Raises
         ------
         RuntimeError
             Raised if any psfCandidate has width or height smaller than
-            config.kernelSize.
+            ``stampSize``.
         """
-        # We can assume all candidates have the same dimensions.
+        # All candidates will necessarily have the same dimensions.
         candidate = psfCandidateList[0]
-        drawSize = int(2*np.floor(0.5*kernelSize/samplingSize) + 1)
-        if (candidate.getHeight() < drawSize
-                or candidate.getWidth() < drawSize):
-            raise RuntimeError("PSF candidates must be at least config.kernelSize/config.samplingSize="
-                               f"{drawSize} pixels per side; "
-                               f"found {candidate.getWidth()}x{candidate.getHeight()}.")
+        if (candidate.getHeight() < stampSize
+                or candidate.getWidth() < stampSize):
+            raise RuntimeError(f"PSF candidates must be at least {stampSize=} pixels per side; "
+                               f"found {candidate.getWidth()}x{candidate.getHeight()}."
+                               )
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
