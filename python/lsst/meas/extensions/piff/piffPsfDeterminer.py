@@ -67,49 +67,41 @@ def _validateGalsimInterpolant(name: str) -> bool:
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
-    spatialOrder = pexConfig.Field(
+    spatialOrder = pexConfig.Field[int](
         doc="specify spatial order for PSF kernel creation",
-        dtype=int,
         default=2,
     )
-    samplingSize = pexConfig.Field(
+    samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
         "e.g. 0.5 is equal to 2x oversampling",
-        dtype=float,
         default=1,
     )
-    outlierNSigma = pexConfig.Field(
+    outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
-        dtype=float,
         default=4.0
     )
-    outlierMaxRemove = pexConfig.Field(
+    outlierMaxRemove = pexConfig.Field[float](
         doc="Max fraction of stars to remove as outliers each iteration",
-        dtype=float,
         default=0.05
     )
-    maxSNR = pexConfig.Field(
+    maxSNR = pexConfig.Field[float](
         doc="Rescale the weight of bright stars such that their SNR is less "
             "than this value.",
-        dtype=float,
         default=200.0
     )
-    zeroWeightMaskBits = pexConfig.ListField(
+    zeroWeightMaskBits = pexConfig.ListField[str](
         doc="List of mask bits for which to set pixel weights to zero.",
-        dtype=str,
         default=['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
     )
-    minimumUnmaskedFraction = pexConfig.Field(
+    minimumUnmaskedFraction = pexConfig.Field[float](
         doc="Minimum fraction of unmasked pixels required to use star.",
-        dtype=float,
         default=0.5
     )
-    interpolant = pexConfig.Field(
+    interpolant = pexConfig.Field[str](
         doc="GalSim interpolant name for Piff to use. "
             "Options include 'Lanczos(N)', where N is an integer, along with "
             "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
             "galsim.Quintic, and galsim.SincInterpolant.",
-        dtype=str,
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
