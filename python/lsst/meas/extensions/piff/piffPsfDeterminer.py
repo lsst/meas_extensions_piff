@@ -67,61 +67,52 @@ def _validateGalsimInterpolant(name: str) -> bool:
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
-    spatialOrder = pexConfig.Field(
+    spatialOrder = pexConfig.Field[int](
         doc="specify spatial order for PSF kernel creation",
-        dtype=int,
         default=2,
     )
-    samplingSize = pexConfig.Field(
+    samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
         "e.g. 0.5 is equal to 2x oversampling",
-        dtype=float,
         default=1,
     )
-    outlierNSigma = pexConfig.Field(
+    outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
-        dtype=float,
         default=4.0
     )
-    outlierMaxRemove = pexConfig.Field(
+    outlierMaxRemove = pexConfig.Field[float](
         doc="Max fraction of stars to remove as outliers each iteration",
-        dtype=float,
         default=0.05
     )
-    maxSNR = pexConfig.Field(
+    maxSNR = pexConfig.Field[float](
         doc="Rescale the weight of bright stars such that their SNR is less "
             "than this value.",
-        dtype=float,
         default=200.0
     )
-    zeroWeightMaskBits = pexConfig.ListField(
+    zeroWeightMaskBits = pexConfig.ListField[str](
         doc="List of mask bits for which to set pixel weights to zero.",
-        dtype=str,
         default=['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
     )
-    minimumUnmaskedFraction = pexConfig.Field(
+    minimumUnmaskedFraction = pexConfig.Field[float](
         doc="Minimum fraction of unmasked pixels required to use star.",
-        dtype=float,
         default=0.5
     )
-    interpolant = pexConfig.Field(
+    interpolant = pexConfig.Field[str](
         doc="GalSim interpolant name for Piff to use. "
             "Options include 'Lanczos(N)', where N is an integer, along with "
             "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
             "galsim.Quintic, and galsim.SincInterpolant.",
-        dtype=str,
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
 
     def setDefaults(self):
-        # kernelSize should be at least 25 so that
+        super().setDefaults()
+        # stampSize should be at least 25 so that
         # i) aperture flux with 12 pixel radius can be compared to PSF flux.
         # ii) fake sources injected to match the 12 pixel aperture flux get
         #     measured correctly
-        self.kernelSize = 25
-        self.kernelSizeMin = 11
-        self.kernelSizeMax = 35
+        self.stampSize = 25
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
@@ -285,16 +276,20 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        kernelSize = int(np.clip(
-            self.config.kernelSize,
-            self.config.kernelSizeMin,
-            self.config.kernelSizeMax
-        ))
-        self._validatePsfCandidates(psfCandidateList, kernelSize, self.config.samplingSize)
+        if self.config.stampSize:
+            stampSize = self.config.stampSize
+            if stampSize > psfCandidateList[0].getWidth():
+                self.log.warning("stampSize is larger than the PSF candidate size.  Using candidate size.")
+                stampSize = psfCandidateList[0].getWidth()
+        else:  # TODO: Only the if block should stay after DM-36311
+            self.log.debug("stampSize not set.  Using candidate size.")
+            stampSize = psfCandidateList[0].getWidth()
+
+        self._validatePsfCandidates(psfCandidateList, stampSize)
 
         stars = []
         for candidate in psfCandidateList:
-            cmi = candidate.getMaskedImage()
+            cmi = candidate.getMaskedImage(stampSize, stampSize)
             good = getGoodPixels(cmi, self.config.zeroWeightMaskBits)
             fracGood = np.sum(good)/good.size
             if fracGood < self.config.minimumUnmaskedFraction:
@@ -326,7 +321,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': self.config.samplingSize,
-                'size': kernelSize,
+                'size': stampSize,
                 'interp': self.config.interpolant
             },
             'interp': {
@@ -346,7 +341,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         pointing = None
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
-        drawSize = 2*np.floor(0.5*kernelSize/self.config.samplingSize) + 1
+        drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
         psf = PiffPsf(drawSize, drawSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
@@ -366,32 +361,31 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         return psf, None
 
-    def _validatePsfCandidates(self, psfCandidateList, kernelSize, samplingSize):
+    # TODO: DM-36311: This method can be removed.
+    @staticmethod
+    def _validatePsfCandidates(psfCandidateList, stampSize):
         """Raise if psfCandidates are smaller than the configured kernelSize.
 
         Parameters
         ----------
         psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
             Sequence of psf candidates to check.
-        kernelSize : `int`
+        stampSize : `int`
             Size of image model to use in PIFF.
-        samplingSize : `float`
-            Resolution of the internal PSF model relative to the pixel size.
 
         Raises
         ------
         RuntimeError
             Raised if any psfCandidate has width or height smaller than
-            config.kernelSize.
+            ``stampSize``.
         """
-        # We can assume all candidates have the same dimensions.
+        # All candidates will necessarily have the same dimensions.
         candidate = psfCandidateList[0]
-        drawSize = int(2*np.floor(0.5*kernelSize/samplingSize) + 1)
-        if (candidate.getHeight() < drawSize
-                or candidate.getWidth() < drawSize):
-            raise RuntimeError("PSF candidates must be at least config.kernelSize/config.samplingSize="
-                               f"{drawSize} pixels per side; "
-                               f"found {candidate.getWidth()}x{candidate.getHeight()}.")
+        if (candidate.getHeight() < stampSize
+                or candidate.getWidth() < stampSize):
+            raise RuntimeError(f"PSF candidates must be at least {stampSize=} pixels per side; "
+                               f"found {candidate.getWidth()}x{candidate.getHeight()}."
+                               )
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
