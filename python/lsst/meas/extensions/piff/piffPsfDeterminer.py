@@ -113,6 +113,10 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
+    debugStarData = pexConfig.Field[bool](
+        doc="Include star images used for fitting in PSF model object.",
+        default=False
+    )
 
     def setDefaults(self):
         # kernelSize should be at least 25 so that
@@ -347,7 +351,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
         drawSize = 2*np.floor(0.5*kernelSize/self.config.samplingSize) + 1
-        psf = PiffPsf(drawSize, drawSize, piffResult)
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
         if flagKey:
@@ -364,7 +367,18 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["avgX"] = np.mean([p.x for p in piffResult.stars])
             metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
-        return psf, None
+        if not self.config.debugStarData:
+            for star in piffResult.stars:
+                # Remove large data objects from the stars
+                del star.fit.params
+                del star.fit.params_var
+                del star.fit.A
+                del star.fit.b
+                del star.data.image
+                del star.data.weight
+                del star.data.orig_weight
+
+        return PiffPsf(drawSize, drawSize, piffResult), None
 
     def _validatePsfCandidates(self, psfCandidateList, kernelSize, samplingSize):
         """Raise if psfCandidates are smaller than the configured kernelSize.
