@@ -72,7 +72,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure = afwImage.makeExposure(self.mi)
         self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
                                                        1.5*sigma1, 1, 0.1))
-        cdMatrix = np.array([1.0, 0.0, 0.0, 1.0])
+        cdMatrix = np.array([1.0, 0.0, 0.0, 1.0]) * 0.2/3600
         cdMatrix.shape = (2, 2)
         wcs = afwGeom.makeSkyWcs(crpix=geom.PointD(0, 0),
                                  crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
@@ -161,7 +161,12 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             cand = measAlg.makePsfCandidate(source, self.exposure)
             self.cellSet.insertCandidate(cand)
 
-    def setupDeterminer(self, stampSize=None, debugStarData=False):
+    def setupDeterminer(
+        self,
+        stampSize=None,
+        debugStarData=False,
+        useCoordinates='pixel'
+    ):
         """Setup the starSelector and psfDeterminer
 
         Parameters
@@ -193,6 +198,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         if stampSize is not None:
             psfDeterminerConfig.stampSize = stampSize
         psfDeterminerConfig.debugStarData = debugStarData
+        psfDeterminerConfig.useCoordinates = useCoordinates
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -219,15 +225,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertGreater(chi_min, -chi_lim)
             self.assertLess(chi_max, chi_lim)
 
-    def checkPiffDeterminer(self, stampSize=None, debugStarData=False):
+    def checkPiffDeterminer(self, **kwargs):
         """Configure PiffPsfDeterminerTask and run basic tests on it.
 
         Parameters
         ----------
-        stampSize : `int`, optional
-            Set ``config.stampSize`` to this, if not None.
+        kwargs : `dict`, optional
+            Additional keyword arguments to pass to setupDeterminer.
         """
-        self.setupDeterminer(stampSize=stampSize, debugStarData=debugStarData)
+        self.setupDeterminer(**kwargs)
         metadata = dafBase.PropertyList()
 
         stars = self.starSelector.run(self.catalog, exposure=self.exposure)
@@ -311,11 +317,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def testPiffDeterminer_kernelSize27(self):
         """Test Piff with a psf kernelSize of 27."""
-        self.checkPiffDeterminer(27)
+        self.checkPiffDeterminer(stampSize=27)
 
     def testPiffDeterminer_debugStarData(self):
         """Test Piff with debugStarData=True."""
         self.checkPiffDeterminer(debugStarData=True)
+
+    def testPiffDeterminer_skyCoords(self):
+        """Test Piff sky coords."""
+        self.checkPiffDeterminer(useCoordinates='sky')
 
     @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
     def test_validatePsfCandidates(self, samplingSize):
