@@ -26,10 +26,12 @@ import piff
 import galsim
 import re
 
+from lsst.afw.cameraGeom import PIXELS, FIELD_ANGLE
 import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from .piffPsf import PiffPsf
+from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
 
 
 def _validateGalsimInterpolant(name: str) -> bool:
@@ -108,6 +110,15 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     debugStarData = pexConfig.Field[bool](
         doc="Include star images used for fitting in PSF model object.",
         default=False
+    )
+    useCoordinates = pexConfig.ChoiceField[str](
+        doc="Which spatial coordinates to regress against in PSF modeling.",
+        allowed=dict(
+            pixel='Regress against pixel coordinates',
+            field='Regress against field angles',
+            sky='Regress against RA/Dec'
+        ),
+        default='pixel'
     )
 
     def setDefaults(self):
@@ -291,6 +302,26 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         self._validatePsfCandidates(psfCandidateList, stampSize)
 
+        scale = exposure.getWcs().getPixelScale().asArcseconds()
+        match self.config.useCoordinates:
+            case 'field':
+                detector = exposure.getDetector()
+                pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
+                gswcs = UVWcsWrapper(pix_to_field)
+                pointing = None
+            case 'sky':
+                gswcs = CelestialWcsWrapper(exposure.getWcs())
+                skyOrigin = exposure.getWcs().getSkyOrigin()
+                ra = skyOrigin.getLongitude().asDegrees()
+                dec = skyOrigin.getLatitude().asDegrees()
+                pointing = galsim.CelestialCoord(
+                    ra*galsim.degrees,
+                    dec*galsim.degrees
+                )
+            case 'pixel':
+                gswcs = galsim.PixelScale(scale)
+                pointing = None
+
         stars = []
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage(stampSize, stampSize)
@@ -305,9 +336,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 galsim.PositionI(*bbox.getMin()),
                 galsim.PositionI(*bbox.getMax())
             )
-            gsImage = galsim.Image(bds, scale=1.0, dtype=float)
+            gsImage = galsim.Image(bds, wcs=gswcs, dtype=float)
             gsImage.array[:] = cmi.image.array
-            gsWeight = galsim.Image(bds, scale=1.0, dtype=float)
+            gsWeight = galsim.Image(bds, wcs=gswcs, dtype=float)
             gsWeight.array[:] = weight
 
             source = candidate.getSource()
@@ -316,7 +347,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             data = piff.StarData(
                 gsImage,
                 image_pos,
-                weight=gsWeight
+                weight=gsWeight,
+                pointing=pointing
             )
             stars.append(piff.Star(data, None))
 
@@ -324,7 +356,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'type': "Simple",
             'model': {
                 'type': 'PixelGrid',
-                'scale': self.config.samplingSize,
+                'scale': scale * self.config.samplingSize,
                 'size': stampSize,
                 'interp': self.config.interpolant
             },
@@ -340,9 +372,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         }
 
         piffResult = piff.PSF.process(piffConfig)
-        # Run on a single CCD, and in image coords rather than sky coords.
-        wcs = {0: galsim.PixelScale(1.0)}
-        pointing = None
+        wcs = {0: gswcs}
 
         piffResult.fit(stars, wcs, pointing, logger=self.log)
         drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1

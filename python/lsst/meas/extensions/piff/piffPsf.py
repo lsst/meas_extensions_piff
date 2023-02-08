@@ -86,8 +86,8 @@ class PiffPsf(ImagePsf):
 
     def getAveragePosition(self):
         if self._averagePosition is None:
-            x = np.mean([star.field_pos.x for star in self._piffResult.stars])
-            y = np.mean([star.field_pos.y for star in self._piffResult.stars])
+            x = np.mean([star.image_pos.x for star in self._piffResult.stars])
+            y = np.mean([star.image_pos.y for star in self._piffResult.stars])
             self._averagePosition = Point2D(x, y)
         return self._averagePosition
 
