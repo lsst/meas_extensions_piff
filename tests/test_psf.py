@@ -160,7 +160,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             cand = measAlg.makePsfCandidate(source, self.exposure)
             self.cellSet.insertCandidate(cand)
 
-    def setupDeterminer(self, kernelSize=None):
+    def setupDeterminer(self, kernelSize=None, debugStarData=False):
         """Setup the starSelector and psfDeterminer
 
         Parameters
@@ -191,6 +191,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         psfDeterminerConfig.spatialOrder = 1
         if kernelSize is not None:
             psfDeterminerConfig.kernelSize = kernelSize
+        psfDeterminerConfig.debugStarData = debugStarData
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -217,7 +218,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertGreater(chi_min, -chi_lim)
             self.assertLess(chi_max, chi_lim)
 
-    def checkPiffDeterminer(self, kernelSize=None):
+    def checkPiffDeterminer(self, kernelSize=None, debugStarData=False):
         """Configure PiffPsfDeterminerTask and run basic tests on it.
 
         Parameters
@@ -225,7 +226,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         kernelSize : `int`, optional
             Set ``config.kernelSize`` to this, if not None.
         """
-        self.setupDeterminer(kernelSize=kernelSize)
+        self.setupDeterminer(kernelSize=kernelSize, debugStarData=debugStarData)
         metadata = dafBase.PropertyList()
 
         stars = self.starSelector.run(self.catalog, exposure=self.exposure)
@@ -250,6 +251,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                 np.mean([s.y for s in psf._piffResult.stars])
             )
         )
+        if self.psfDeterminer.config.debugStarData:
+            self.assertIn('image', psf._piffResult.stars[0].data.__dict__)
+        else:
+            self.assertNotIn('image', psf._piffResult.stars[0].data.__dict__)
 
         # Test how well we can subtract the PSF model
         self.subtractStars(self.exposure, self.catalog, chi_lim=6.1)
@@ -306,6 +311,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_kernelSize27(self):
         """Test Piff with a psf kernelSize of 27."""
         self.checkPiffDeterminer(27)
+
+    def testPiffDeterminer_debugStarData(self):
+        """Test Piff with debugStarData=True."""
+        self.checkPiffDeterminer(debugStarData=True)
 
     @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
     def test_validatePsfCandidates(self, samplingSize):
