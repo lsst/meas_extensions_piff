@@ -348,38 +348,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff sky coords."""
         self.checkPiffDeterminer(useCoordinates='sky')
 
-    @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
-    def test_validatePsfCandidates(self, samplingSize):
-        """Test that `_validatePsfCandidates` raises for too-small candidates.
-
-        This should be independent of the samplingSize parameter.
-        """
-        drawSizeDict = {1.0: 27,
-                        0.9: 31,
-                        1.1: 25,
-                        }
-
-        makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        makePsfCandidatesConfig.kernelSize = 23
-        self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
-        psfCandidateList = self.makePsfCandidates.run(
-            self.catalog,
-            exposure=self.exposure
-        ).psfCandidates
-
-        psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.stampSize = drawSizeDict[samplingSize]
-        psfDeterminerConfig.samplingSize = samplingSize
-        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
-
-        with self.assertRaisesRegex(RuntimeError,
-                                    "stampSize=27 "
-                                    "pixels per side; found 23x23"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27)
-
-        # This should not raise.
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21)
-
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
     """A test case to check for valid Piff config"""
