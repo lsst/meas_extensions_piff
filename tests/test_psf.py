@@ -37,7 +37,6 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
-from lsst.pex.config import FieldValidationError
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -370,29 +369,6 @@ class PiffConfigTestCase(lsst.utils.tests.TestCase):
             self.assertFalse(_validateGalsimInterpolant(interp))
             self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
             self.assertTrue(eval(f"galsim.{interp}"))
-
-    def testKernelSize(self):  # TODO: Remove this test in DM-36311.
-        config = PiffPsfDeterminerConfig()
-
-        # Setting both stampSize and kernelSize should raise an error.
-        config.stampSize = 27
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = 25
-        self.assertRaises(FieldValidationError, config.validate)
-
-        # even if they agree with each other
-        config.stampSize = 31
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = 31
-        self.assertRaises(FieldValidationError, config.validate)
-
-        # Setting stampSize and kernelSize should be valid, because if not
-        # set, stampSize is set to the size of PSF candidates internally.
-        # This is only a temporary behavior and should go away in DM-36311.
-        config.stampSize = None
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = None
-        config.validate()
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
