@@ -336,8 +336,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test piff with the default config."""
         self.checkPiffDeterminer()
 
-    def testPiffDeterminer_kernelSize27(self):
-        """Test Piff with a psf kernelSize of 27."""
+    def testPiffDeterminer_stampSize27(self):
+        """Test Piff with a psf stampSize of 27."""
         self.checkPiffDeterminer(stampSize=27)
 
     def testPiffDeterminer_debugStarData(self):
