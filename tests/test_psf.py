@@ -1,3 +1,24 @@
+# This file is part of meas_extensions_piff.
+#
+# Developed for the LSST Data Management System.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import galsim  # noqa: F401
 import unittest
 import numpy as np
@@ -16,7 +37,6 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
-from lsst.pex.config import FieldValidationError
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -315,8 +335,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test piff with the default config."""
         self.checkPiffDeterminer()
 
-    def testPiffDeterminer_kernelSize27(self):
-        """Test Piff with a psf kernelSize of 27."""
+    def testPiffDeterminer_stampSize27(self):
+        """Test Piff with a psf stampSize of 27."""
         self.checkPiffDeterminer(stampSize=27)
 
     def testPiffDeterminer_debugStarData(self):
@@ -326,38 +346,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_skyCoords(self):
         """Test Piff sky coords."""
         self.checkPiffDeterminer(useCoordinates='sky')
-
-    @lsst.utils.tests.methodParameters(samplingSize=[1.0, 0.9, 1.1])
-    def test_validatePsfCandidates(self, samplingSize):
-        """Test that `_validatePsfCandidates` raises for too-small candidates.
-
-        This should be independent of the samplingSize parameter.
-        """
-        drawSizeDict = {1.0: 27,
-                        0.9: 31,
-                        1.1: 25,
-                        }
-
-        makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        makePsfCandidatesConfig.kernelSize = 23
-        self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
-        psfCandidateList = self.makePsfCandidates.run(
-            self.catalog,
-            exposure=self.exposure
-        ).psfCandidates
-
-        psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.stampSize = drawSizeDict[samplingSize]
-        psfDeterminerConfig.samplingSize = samplingSize
-        self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
-
-        with self.assertRaisesRegex(RuntimeError,
-                                    "stampSize=27 "
-                                    "pixels per side; found 23x23"):
-            self.psfDeterminer._validatePsfCandidates(psfCandidateList, 27)
-
-        # This should not raise.
-        self.psfDeterminer._validatePsfCandidates(psfCandidateList, 21)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
@@ -381,29 +369,6 @@ class PiffConfigTestCase(lsst.utils.tests.TestCase):
             self.assertFalse(_validateGalsimInterpolant(interp))
             self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
             self.assertTrue(eval(f"galsim.{interp}"))
-
-    def testKernelSize(self):  # TODO: Remove this test in DM-36311.
-        config = PiffPsfDeterminerConfig()
-
-        # Setting both stampSize and kernelSize should raise an error.
-        config.stampSize = 27
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = 25
-        self.assertRaises(FieldValidationError, config.validate)
-
-        # even if they agree with each other
-        config.stampSize = 31
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = 31
-        self.assertRaises(FieldValidationError, config.validate)
-
-        # Setting stampSize and kernelSize should be valid, because if not
-        # set, stampSize is set to the size of PSF candidates internally.
-        # This is only a temporary behavior and should go away in DM-36311.
-        config.stampSize = None
-        with self.assertWarns(FutureWarning):
-            config.kernelSize = None
-        config.validate()
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):

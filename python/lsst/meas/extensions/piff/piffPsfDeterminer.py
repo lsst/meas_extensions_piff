@@ -300,8 +300,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             self.log.debug("stampSize not set.  Using candidate size.")
             stampSize = psfCandidateList[0].getWidth()
 
-        self._validatePsfCandidates(psfCandidateList, stampSize)
-
         scale = exposure.getWcs().getPixelScale().asArcseconds()
         match self.config.useCoordinates:
             case 'field':
@@ -404,32 +402,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 del star.data.orig_weight
 
         return PiffPsf(drawSize, drawSize, piffResult), None
-
-    # TODO: DM-36311: This method can be removed.
-    @staticmethod
-    def _validatePsfCandidates(psfCandidateList, stampSize):
-        """Raise if psfCandidates are smaller than the configured kernelSize.
-
-        Parameters
-        ----------
-        psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
-            Sequence of psf candidates to check.
-        stampSize : `int`
-            Size of image model to use in PIFF.
-
-        Raises
-        ------
-        RuntimeError
-            Raised if any psfCandidate has width or height smaller than
-            ``stampSize``.
-        """
-        # All candidates will necessarily have the same dimensions.
-        candidate = psfCandidateList[0]
-        if (candidate.getHeight() < stampSize
-                or candidate.getWidth() < stampSize):
-            raise RuntimeError(f"PSF candidates must be at least {stampSize=} pixels per side; "
-                               f"found {candidate.getWidth()}x{candidate.getHeight()}."
-                               )
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
