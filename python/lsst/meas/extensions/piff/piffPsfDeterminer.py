@@ -78,6 +78,10 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "e.g. 0.5 is equal to 2x oversampling",
         default=1,
     )
+    modelSize = pexConfig.Field[int](
+        doc="Internal model size for PIFF",
+        default=25,
+    )
     outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
         default=4.0
@@ -123,11 +127,17 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
 
     def setDefaults(self):
         super().setDefaults()
-        # stampSize should be at least 25 so that
+        # stampSize for PIFF means the size of input stamps extracted for each
+        # object.
+        #
+        # stampSize should be at least modelSize*sqrt(2)/samplingSize
+        # to ensure that rotated images have support in the model
+        # also we want to ensure
         # i) aperture flux with 12 pixel radius can be compared to PSF flux.
         # ii) fake sources injected to match the 12 pixel aperture flux get
         #     measured correctly
-        self.stampSize = 25
+        # Default modelSize is 25, and 35 is about sqrt(2) * 25
+        self.stampSize = 35
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
@@ -291,6 +301,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+
         if self.config.stampSize:
             stampSize = self.config.stampSize
             if stampSize > psfCandidateList[0].getWidth():
@@ -300,13 +311,17 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             self.log.debug("stampSize not set.  Using candidate size.")
             stampSize = psfCandidateList[0].getWidth()
 
+        _check_stamp_size(self.config)
+
         scale = exposure.getWcs().getPixelScale().asArcseconds()
+
         match self.config.useCoordinates:
             case 'field':
                 detector = exposure.getDetector()
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
+
             case 'sky':
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
                 skyOrigin = exposure.getWcs().getSkyOrigin()
@@ -316,6 +331,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     ra*galsim.degrees,
                     dec*galsim.degrees
                 )
+
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
@@ -355,7 +371,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': scale * self.config.samplingSize,
-                'size': stampSize,
+                'size': self.config.modelSize,
                 'interp': self.config.interpolant
             },
             'interp': {
@@ -402,6 +418,24 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 del star.data.orig_weight
 
         return PiffPsf(drawSize, drawSize, piffResult), None
+
+
+def _check_stamp_size(config):
+    coord_sys = config.useCoordinates
+    stamp_size = config.stampSize
+    model_size = config.modelSize
+    sampling_size = config.samplingSize
+    if coord_sys == 'sky':
+        min_stamp_size = int(np.sqrt(2) * model_size / sampling_size)
+    else:
+        min_stamp_size = int(model_size / sampling_size)
+
+    if stamp_size < min_stamp_size:
+        raise ValueError(
+            'for {coord_sys} coords and modelSize {model_size} '
+            f'we require stampSize >= '
+            f'{min_stamp_size}, got {stamp_size}'
+        )
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)
