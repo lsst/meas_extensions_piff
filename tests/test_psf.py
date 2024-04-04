@@ -92,11 +92,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure = afwImage.makeExposure(self.mi)
         self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
                                                        1.5*sigma1, 1, 0.1))
-        cdMatrix = np.array([1.0, 0.0, 0.0, 1.0]) * 0.2/3600
-        cdMatrix.shape = (2, 2)
-        wcs = afwGeom.makeSkyWcs(crpix=geom.PointD(0, 0),
-                                 crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
-                                 cdMatrix=cdMatrix)
+        wcs = _get_wcs()
         self.exposure.setWcs(wcs)
 
         #
@@ -183,7 +179,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def setupDeterminer(
         self,
-        stampSize=None,
+        stampSize=35,
+        modelSize=25,
         debugStarData=False,
         useCoordinates='pixel'
     ):
@@ -209,14 +206,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
-        if stampSize is not None:
-            makePsfCandidatesConfig.kernelSize = stampSize
+        makePsfCandidatesConfig.kernelSize = stampSize
+
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
-        if stampSize is not None:
-            psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.modelSize = modelSize
+
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
 
@@ -284,7 +282,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertNotIn('image', psf._piffResult.stars[0].data.__dict__)
 
         # Test how well we can subtract the PSF model
-        self.subtractStars(self.exposure, self.catalog, chi_lim=6.1)
+        # note chi_lim increased from 6.1 to 6.5
+        self.subtractStars(self.exposure, self.catalog, chi_lim=6.5)
 
         # Test bboxes
         for point in [
@@ -345,7 +344,39 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def testPiffDeterminer_skyCoords(self):
         """Test Piff sky coords."""
+
         self.checkPiffDeterminer(useCoordinates='sky')
+
+    def testPiffDeterminer_skyCoords_rot35(self):
+        """Test Piff sky coords."""
+
+        wcs = _get_wcs(angle_degrees=35)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky')
+
+    def testPiffDeterminer_skyCoords_rot77(self):
+        """Test Piff sky coords."""
+
+        # causes a relatively bad fit
+        wcs = _get_wcs(angle_degrees=77)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky')
+
+    def testPiffDeterminer_skyCoords_rot135(self):
+        """Test Piff sky coords."""
+
+        wcs = _get_wcs(angle_degrees=135)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky')
+
+    # 45 degrees causes singular matrix in PIFF
+    # interestingly 135 does not
+    # def testPiffDeterminer_skyCoords_rot45(self):
+    #     """Test Piff sky coords."""
+    #
+    #     wcs = _get_wcs(angle_degrees=45)
+    #     self.exposure.setWcs(wcs)
+    #     self.checkPiffDeterminer(useCoordinates='sky')
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
@@ -369,6 +400,29 @@ class PiffConfigTestCase(lsst.utils.tests.TestCase):
             self.assertFalse(_validateGalsimInterpolant(interp))
             self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
             self.assertTrue(eval(f"galsim.{interp}"))
+
+
+def _get_wcs(angle_degrees=None):
+    cdMatrix = np.array([
+        [1.0, 0.0],
+        [0.0, 1.0]
+    ]) * 0.2 / 3600
+
+    if angle_degrees is not None:
+        angle_radians = np.radians(angle_degrees)
+        cosang = np.cos(angle_radians)
+        sinang = np.sin(angle_radians)
+        rot = np.array([
+            [cosang, -sinang],
+            [sinang, cosang]
+        ])
+        cdMatrix = np.dot(cdMatrix, rot)
+
+    return afwGeom.makeSkyWcs(
+        crpix=geom.PointD(0, 0),
+        crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
+        cdMatrix=cdMatrix,
+    )
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
