@@ -371,12 +371,12 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     # 45 degrees causes singular matrix in PIFF
     # interestingly 135 does not
-    # def testPiffDeterminer_skyCoords_rot45(self):
-    #     """Test Piff sky coords."""
-    #
-    #     wcs = _get_wcs(angle_degrees=45)
-    #     self.exposure.setWcs(wcs)
-    #     self.checkPiffDeterminer(useCoordinates='sky')
+    def testPiffDeterminer_skyCoords_rot45(self):
+        """Test Piff sky coords."""
+
+        wcs = _get_wcs(angle_degrees=45)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky')
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):

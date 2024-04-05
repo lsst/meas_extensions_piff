@@ -31,7 +31,7 @@ import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from .piffPsf import PiffPsf
-from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
+from .wcs_wrapper import UVWcsWrapper
 
 
 def _validateGalsimInterpolant(name: str) -> bool:
@@ -270,6 +270,12 @@ def _computeWeightAlternative(maskedImage, maxSNR):
     return weightArr
 
 
+def _make_gs_wcs(dm_wcs):
+    plist = dm_wcs.getFitsMetadata()
+    wcs = galsim.FitsWCS(header=plist)
+    return wcs
+
+
 class PiffPsfDeterminerTask(BasePsfDeterminerTask):
     """A measurePsfTask PSF estimator using Piff as the implementation.
     """
@@ -323,15 +329,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 pointing = None
 
             case 'sky':
-                gswcs = CelestialWcsWrapper(exposure.getWcs())
-                skyOrigin = exposure.getWcs().getSkyOrigin()
-                ra = skyOrigin.getLongitude().asDegrees()
-                dec = skyOrigin.getLatitude().asDegrees()
-                pointing = galsim.CelestialCoord(
-                    ra*galsim.degrees,
-                    dec*galsim.degrees
-                )
-
+                gswcs = _make_gs_wcs(exposure.getWcs())
+                pointing = gswcs.toWorld(gswcs.origin)
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
