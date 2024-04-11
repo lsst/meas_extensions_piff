@@ -436,6 +436,10 @@ def _check_stamp_size(config):
             f'we require stampSize >= '
             f'{min_stamp_size}, got {stamp_size}'
         )
+    if stamp_size % 2 == 0:
+        raise ValueError(f'stampSize should be odd, got {stamp_size}')
+    if model_size % 2 == 0:
+        raise ValueError(f'modelSize should be odd, got {model_size}')
 
 
 measAlg.psfDeterminerRegistry.register("piff", PiffPsfDeterminerTask)

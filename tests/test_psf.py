@@ -378,6 +378,16 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure.setWcs(wcs)
         self.checkPiffDeterminer(useCoordinates='sky')
 
+    def testPiffDeterminer_stampSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(stampSize=26)
+
+    def testPiffDeterminer_modelSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(modelSize=26)
+
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
     """A test case to check for valid Piff config"""
