@@ -185,7 +185,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self,
         stampSize=None,
         debugStarData=False,
-        useCoordinates='pixel'
+        useCoordinates='pixel',
+        downsample=False,
     ):
         """Setup the starSelector and psfDeterminer
 
@@ -219,6 +220,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             psfDeterminerConfig.stampSize = stampSize
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
+        if downsample:
+            psfDeterminerConfig.maxCandidates = 10
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -269,8 +272,19 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         )
         self.exposure.setPsf(psf)
 
-        self.assertEqual(len(psfCandidateList), metadata['numAvailStars'])
+        if kwargs.get("downsample", False):
+            # When downsampling the PSF model is not quite as
+            # good so the chi2 test limit needs to be modified.
+            numAvail = self.psfDeterminer.config.maxCandidates
+            chiLim = 7.0
+        else:
+            numAvail = len(psfCandidateList)
+            chiLim = 6.1
+
+        self.assertEqual(metadata['numAvailStars'], numAvail)
         self.assertEqual(sum(self.catalog['use_psf']), metadata['numGoodStars'])
+        self.assertLessEqual(metadata['numGoodStars'], metadata['numAvailStars'])
+
         self.assertEqual(
             psf.getAveragePosition(),
             geom.Point2D(
@@ -284,7 +298,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertNotIn('image', psf._piffResult.stars[0].data.__dict__)
 
         # Test how well we can subtract the PSF model
-        self.subtractStars(self.exposure, self.catalog, chi_lim=6.1)
+        self.subtractStars(self.exposure, self.catalog, chi_lim=chiLim)
 
         # Test bboxes
         for point in [
@@ -346,6 +360,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_skyCoords(self):
         """Test Piff sky coords."""
         self.checkPiffDeterminer(useCoordinates='sky')
+
+    def testPiffDeterminer_downsample(self):
+        """Test Piff determiner with downsampling."""
+        self.checkPiffDeterminer(downsample=True)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):

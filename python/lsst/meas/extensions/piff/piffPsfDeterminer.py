@@ -297,6 +297,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+        psfCandidateList = self.downsampleCandidates(psfCandidateList)
+
         if self.config.stampSize:
             stampSize = self.config.stampSize
             if stampSize > psfCandidateList[0].getWidth():
