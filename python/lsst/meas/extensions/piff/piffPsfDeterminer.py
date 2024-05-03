@@ -25,7 +25,9 @@ import numpy as np
 import piff
 import galsim
 import re
+import logging
 
+import lsst.utils.logging
 from lsst.afw.cameraGeom import PIXELS, FIELD_ANGLE
 import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
@@ -119,6 +121,14 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
             sky='Regress against RA/Dec'
         ),
         default='pixel'
+    )
+    piffLoggingLevel = pexConfig.RangeField[int](
+        doc="PIFF-specific logging level, from 0 (least chatty) to 3 (very verbose); "
+            "note that logs will come out with unrelated notations (e.g. WARNING does "
+            "not imply a warning.)",
+        default=0,
+        min=0,
+        max=3,
     )
 
     def setDefaults(self):
@@ -272,6 +282,18 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
     ConfigClass = PiffPsfDeterminerConfig
     _DefaultName = "psfDeterminer.Piff"
 
+    def __init__(self, config, schema=None, **kwds):
+        BasePsfDeterminerTask.__init__(self, config, schema=schema, **kwds)
+
+        piffLoggingLevels = {
+            0: logging.CRITICAL,
+            1: logging.WARNING,
+            2: logging.INFO,
+            3: logging.DEBUG,
+        }
+        self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
+        self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
+
     def determinePsf(
         self, exposure, psfCandidateList, metadata=None, flagKey=None
     ):
@@ -380,7 +402,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
 
-        piffResult.fit(stars, wcs, pointing, logger=self.log)
+        piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
         drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
