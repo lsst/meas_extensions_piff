@@ -68,6 +68,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def setUp(self):
         config = SingleFrameMeasurementTask.ConfigClass()
+        config.plugins.names = [
+            "base_PsfFlux",
+            "base_GaussianFlux",
+            "base_SdssCentroid",
+            "base_SdssShape",
+            "base_PixelFlags",
+            "base_CircularApertureFlux",
+        ]
         config.slots.apFlux = 'base_CircularApertureFlux_12_0'
         self.schema = afwTable.SourceTable.makeMinimalSchema()
 
