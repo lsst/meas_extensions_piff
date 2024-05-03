@@ -250,7 +250,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         chi_min = np.min(chi.getImage().getArray())
         chi_max = np.max(chi.getImage().getArray())
-        print(chi_min, chi_max)
 
         if chi_lim > 0:
             self.assertGreater(chi_min, -chi_lim)
