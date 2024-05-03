@@ -24,6 +24,7 @@ import unittest
 import numpy as np
 import copy
 from galsim import Lanczos  # noqa: F401
+import logging
 
 import lsst.utils.tests
 import lsst.afw.detection as afwDetection
@@ -68,6 +69,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def setUp(self):
         config = SingleFrameMeasurementTask.ConfigClass()
+        config.plugins.names = [
+            "base_PsfFlux",
+            "base_GaussianFlux",
+            "base_SdssCentroid",
+            "base_SdssShape",
+            "base_PixelFlags",
+            "base_CircularApertureFlux",
+        ]
         config.slots.apFlux = 'base_CircularApertureFlux_12_0'
         self.schema = afwTable.SourceTable.makeMinimalSchema()
 
@@ -187,6 +196,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         debugStarData=False,
         useCoordinates='pixel',
         downsample=False,
+        withlog=False,
     ):
         """Setup the starSelector and psfDeterminer
 
@@ -222,6 +232,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         psfDeterminerConfig.useCoordinates = useCoordinates
         if downsample:
             psfDeterminerConfig.maxCandidates = 10
+        if withlog:
+            psfDeterminerConfig.piffLoggingLevel = 1
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
@@ -242,7 +254,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         chi_min = np.min(chi.getImage().getArray())
         chi_max = np.max(chi.getImage().getArray())
-        print(chi_min, chi_max)
 
         if chi_lim > 0:
             self.assertGreater(chi_min, -chi_lim)
@@ -264,12 +275,29 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             stars.sourceCat,
             exposure=self.exposure
         ).psfCandidates
-        psf, cellSet = self.psfDeterminer.determinePsf(
-            self.exposure,
-            psfCandidateList,
-            metadata,
-            flagKey=self.usePsfFlag
-        )
+
+        logger = logging.getLogger("lsst.psfDeterminer.Piff")
+
+        with self.assertLogs("lsst.psfDeterminer.Piff.piff", logging.WARNING) as cm:
+            with self.assertNoLogs("lsst.psfDeterminer.Piff", logging.WARNING):
+                psf, cellSet = self.psfDeterminer.determinePsf(
+                    self.exposure,
+                    psfCandidateList,
+                    metadata,
+                    flagKey=self.usePsfFlag
+                )
+
+        # Check that the iterations are being logged.
+        logged = "\n".join(cm.output)
+        self.assertRegex(logged, "WARNING:.*:Iteration")
+
+        # And check that the levels are set correctly for suppression.
+        logger = logging.getLogger("lsst.psfDeterminer.Piff.piff")
+        if kwargs.get("withlog", False):
+            self.assertEqual(logger.level, logging.WARNING)
+        else:
+            self.assertEqual(logger.level, logging.CRITICAL)
+
         self.exposure.setPsf(psf)
 
         if kwargs.get("downsample", False):
@@ -364,6 +392,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_downsample(self):
         """Test Piff determiner with downsampling."""
         self.checkPiffDeterminer(downsample=True)
+
+    def testPiffDeterminer_withlog(self):
+        """Test Piff determiner with chatty logs."""
+        self.checkPiffDeterminer(withlog=True)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
