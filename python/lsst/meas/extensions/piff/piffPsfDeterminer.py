@@ -331,12 +331,14 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             stampSize = psfCandidateList[0].getWidth()
 
         scale = exposure.getWcs().getPixelScale().asArcseconds()
+
         match self.config.useCoordinates:
             case 'field':
                 detector = exposure.getDetector()
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
+
             case 'sky':
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
                 skyOrigin = exposure.getWcs().getSkyOrigin()
@@ -346,6 +348,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     ra*galsim.degrees,
                     dec*galsim.degrees
                 )
+
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
