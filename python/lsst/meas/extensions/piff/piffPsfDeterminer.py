@@ -149,6 +149,22 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         if self.useCoordinates == "sky":
             self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
 
+    def validate(self):
+        super().validate()
+
+        if (stamp_size := self.stampSize) is not None:
+            model_size = self.modelSize
+            sampling_size = self.samplingSize
+            if self.useCoordinates == 'sky':
+                min_stamp_size = int(np.sqrt(2) * model_size / sampling_size)
+            else:
+                min_stamp_size = int(model_size / sampling_size)
+
+            if stamp_size < min_stamp_size:
+                msg = (f"PIFF model size of {model_size} is too large for stamp size {stamp_size}. "
+                       f"Set stampSize >= {min_stamp_size}"
+                       )
+                raise pexConfig.FieldValidationError(self.__class__.modelSize, self, msg)
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
