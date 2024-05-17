@@ -141,7 +141,14 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         # i) aperture flux with 12 pixel radius can be compared to PSF flux.
         # ii) fake sources injected to match the 12 pixel aperture flux get
         #     measured correctly
+        # stampSize should also be at least sqrt(2)*modelSize/samplingSize so
+        # that rotated images have support in the model
+
         self.stampSize = 25
+        # Resize the stamp to accommodate the model, but only if necessary.
+        if self.useCoordinates == "sky":
+            self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
+
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
