@@ -80,6 +80,10 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "e.g. 0.5 is equal to 2x oversampling",
         default=1,
     )
+    modelSize = pexConfig.Field[int](
+        doc="Internal model size for PIFF (typically odd, but not enforced)",
+        default=25,
+    )
     outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
         default=4.0
@@ -388,7 +392,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': scale * self.config.samplingSize,
-                'size': stampSize,
+                'size': self.config.modelSize,
                 'interp': self.config.interpolant
             },
             'interp': {
