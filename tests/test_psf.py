@@ -38,6 +38,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
+from packaging import version
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -463,6 +464,17 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff sky coords with rotation."""
 
         wcs = make_wcs(angle_degrees=angle_degrees)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
+
+    # TODO: Merge this case with the above in DM-44467.
+    @unittest.skipUnless(version.parse(galsim.version) >= version.parse("2.5.2"),
+                         reason="Requires GalSim >= 2.5.2",
+                         )
+    def testPiffDeterminer_skyCoords_rot45(self):
+        """Test Piff sky coords."""
+
+        wcs = make_wcs(angle_degrees=45)
         self.exposure.setWcs(wcs)
         self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
 
