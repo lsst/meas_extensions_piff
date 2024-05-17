@@ -55,6 +55,41 @@ def psfVal(ix, iy, x, y, sigma1, sigma2, b):
             + b*np.exp(-0.5*(u**2 + (v*ab)**2)/sigma2**2))/(1 + b)
 
 
+def make_wcs(angle_degrees=None):
+    """Make a simple SkyWcs that is rotated around the origin.
+
+    Parameters
+    ----------
+    angle_degrees : `float`, optional
+        The angle to rotate the WCS by, in degrees.
+
+    Returns
+    -------
+    wcs : `~lsst.afw.geom.SkyWcs`
+        The WCS object.
+    """
+    cdMatrix = np.array([
+        [1.0, 0.0],
+        [0.0, 1.0]
+    ]) * 0.2 / 3600
+
+    if angle_degrees is not None:
+        angle_radians = np.radians(angle_degrees)
+        cosang = np.cos(angle_radians)
+        sinang = np.sin(angle_radians)
+        rot = np.array([
+            [cosang, -sinang],
+            [sinang, cosang]
+        ])
+        cdMatrix = np.dot(cdMatrix, rot)
+
+    return afwGeom.makeSkyWcs(
+        crpix=geom.PointD(0, 0),
+        crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
+        cdMatrix=cdMatrix,
+    )
+
+
 class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     """A test case for SpatialModelPsf"""
 
@@ -101,11 +136,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure = afwImage.makeExposure(self.mi)
         self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
                                                        1.5*sigma1, 1, 0.1))
-        cdMatrix = np.array([1.0, 0.0, 0.0, 1.0]) * 0.2/3600
-        cdMatrix.shape = (2, 2)
-        wcs = afwGeom.makeSkyWcs(crpix=geom.PointD(0, 0),
-                                 crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
-                                 cdMatrix=cdMatrix)
+        wcs = make_wcs()
         self.exposure.setWcs(wcs)
 
         #
