@@ -237,7 +237,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
-    def subtractStars(self, exposure, catalog, chi_lim=-1):
+    def subtractStars(self, exposure, catalog, chi_lim=-1.):
         """Subtract the exposure's PSF from all the sources in catalog"""
         mi, psf = exposure.getMaskedImage(), exposure.getPsf()
 
