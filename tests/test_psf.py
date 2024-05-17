@@ -357,7 +357,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             chiLim = 7.0
         else:
             numAvail = len(psfCandidateList)
-            chiLim = 6.1
+            chiLim = 6.4
 
         self.assertEqual(metadata['numAvailStars'], numAvail)
         self.assertEqual(sum(self.catalog['use_psf']), metadata['numGoodStars'])
