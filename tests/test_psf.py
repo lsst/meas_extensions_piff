@@ -435,10 +435,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff with debugStarData=True."""
         self.checkPiffDeterminer(debugStarData=True)
 
-    def testPiffDeterminer_skyCoords(self):
-        """Test Piff sky coords."""
-        self.checkPiffDeterminer(useCoordinates='sky')
-
     def testPiffDeterminer_downsample(self):
         """Test Piff determiner with downsampling."""
         self.checkPiffDeterminer(downsample=True)
@@ -446,6 +442,36 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_withlog(self):
         """Test Piff determiner with chatty logs."""
         self.checkPiffDeterminer(withlog=True)
+
+    def testPiffDeterminer_stampSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(stampSize=26)
+
+    def testPiffDeterminer_modelSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(modelSize=26, stampSize=25)
+
+    def testPiffDeterminer_skyCoords(self):
+        """Test Piff sky coords."""
+
+        self.checkPiffDeterminer(useCoordinates='sky')
+
+    @lsst.utils.tests.methodParameters(angle_degrees=[0, 35, 77, 135])
+    def testPiffDeterminer_skyCoords_with_rotation(self, angle_degrees):
+        """Test Piff sky coords with rotation."""
+
+        wcs = make_wcs(angle_degrees=angle_degrees)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
+
+    def testPiffDeterminer_skyCoords_failure(self, angle_degrees=135):
+        """Test that using small PSF candidates with sky coordinates fails."""
+        wcs = make_wcs(angle_degrees=angle_degrees)
+        self.exposure.setWcs(wcs)
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(useCoordinates='sky', stampSize=15)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
