@@ -224,6 +224,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def setupDeterminer(
         self,
         stampSize=None,
+        kernelSize=None,
+        modelSize=25,
         debugStarData=False,
         useCoordinates='pixel',
         downsample=False,
@@ -235,6 +237,19 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ----------
         stampSize : `int`, optional
             Set ``config.stampSize`` to this, if not None.
+        kernelSize : `int`, optional
+            Cutout size for the PSF candidates. This is unused if ``stampSize``
+            if provided and its value is used for cutout size instead.
+        modelSize : `int`, optional
+            Internal model size for PIFF.
+        debugStarData : `bool`, optional
+            Include star images used for fitting in PSF model object?
+        useCoordinates : `str`, optional
+            Spatial coordinates to regress against for PSF modelling.
+        downsample : `bool`, optional
+            Whether to downsample the PSF candidates before modelling?
+        withlog : `bool`, optional
+            Should Piff produce chatty log messages?
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -251,14 +266,18 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
+        if kernelSize:
+            makePsfCandidatesConfig.kernelSize = kernelSize
         if stampSize is not None:
             makePsfCandidatesConfig.kernelSize = stampSize
+
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
-        if stampSize is not None:
-            psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.modelSize = modelSize
+
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
         if downsample:
