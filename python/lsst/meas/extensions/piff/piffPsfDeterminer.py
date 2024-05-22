@@ -80,6 +80,10 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "e.g. 0.5 is equal to 2x oversampling",
         default=1,
     )
+    modelSize = pexConfig.Field[int](
+        doc="Internal model size for PIFF (typically odd, but not enforced)",
+        default=25,
+    )
     outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
         default=4.0
@@ -137,7 +141,30 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         # i) aperture flux with 12 pixel radius can be compared to PSF flux.
         # ii) fake sources injected to match the 12 pixel aperture flux get
         #     measured correctly
+        # stampSize should also be at least sqrt(2)*modelSize/samplingSize so
+        # that rotated images have support in the model
+
         self.stampSize = 25
+        # Resize the stamp to accommodate the model, but only if necessary.
+        if self.useCoordinates == "sky":
+            self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
+
+    def validate(self):
+        super().validate()
+
+        if (stamp_size := self.stampSize) is not None:
+            model_size = self.modelSize
+            sampling_size = self.samplingSize
+            if self.useCoordinates == 'sky':
+                min_stamp_size = int(np.sqrt(2) * model_size / sampling_size)
+            else:
+                min_stamp_size = int(model_size / sampling_size)
+
+            if stamp_size < min_stamp_size:
+                msg = (f"PIFF model size of {model_size} is too large for stamp size {stamp_size}. "
+                       f"Set stampSize >= {min_stamp_size}"
+                       )
+                raise pexConfig.FieldValidationError(self.__class__.modelSize, self, msg)
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
@@ -331,12 +358,14 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             stampSize = psfCandidateList[0].getWidth()
 
         scale = exposure.getWcs().getPixelScale().asArcseconds()
+
         match self.config.useCoordinates:
             case 'field':
                 detector = exposure.getDetector()
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
+
             case 'sky':
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
                 skyOrigin = exposure.getWcs().getSkyOrigin()
@@ -346,6 +375,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     ra*galsim.degrees,
                     dec*galsim.degrees
                 )
+
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
@@ -385,7 +415,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             'model': {
                 'type': 'PixelGrid',
                 'scale': scale * self.config.samplingSize,
-                'size': stampSize,
+                'size': self.config.modelSize,
                 'interp': self.config.interpolant
             },
             'interp': {

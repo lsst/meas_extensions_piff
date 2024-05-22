@@ -38,6 +38,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
+from packaging import version
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -53,6 +54,41 @@ def psfVal(ix, iy, x, y, sigma1, sigma2, b):
 
     return (np.exp(-0.5*(u**2 + (v*ab)**2)/sigma1**2)
             + b*np.exp(-0.5*(u**2 + (v*ab)**2)/sigma2**2))/(1 + b)
+
+
+def make_wcs(angle_degrees=None):
+    """Make a simple SkyWcs that is rotated around the origin.
+
+    Parameters
+    ----------
+    angle_degrees : `float`, optional
+        The angle to rotate the WCS by, in degrees.
+
+    Returns
+    -------
+    wcs : `~lsst.afw.geom.SkyWcs`
+        The WCS object.
+    """
+    cdMatrix = np.array([
+        [1.0, 0.0],
+        [0.0, 1.0]
+    ]) * 0.2 / 3600
+
+    if angle_degrees is not None:
+        angle_radians = np.radians(angle_degrees)
+        cosang = np.cos(angle_radians)
+        sinang = np.sin(angle_radians)
+        rot = np.array([
+            [cosang, -sinang],
+            [sinang, cosang]
+        ])
+        cdMatrix = np.dot(cdMatrix, rot)
+
+    return afwGeom.makeSkyWcs(
+        crpix=geom.PointD(0, 0),
+        crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
+        cdMatrix=cdMatrix,
+    )
 
 
 class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
@@ -101,11 +137,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure = afwImage.makeExposure(self.mi)
         self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
                                                        1.5*sigma1, 1, 0.1))
-        cdMatrix = np.array([1.0, 0.0, 0.0, 1.0]) * 0.2/3600
-        cdMatrix.shape = (2, 2)
-        wcs = afwGeom.makeSkyWcs(crpix=geom.PointD(0, 0),
-                                 crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
-                                 cdMatrix=cdMatrix)
+        wcs = make_wcs()
         self.exposure.setWcs(wcs)
 
         #
@@ -193,6 +225,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def setupDeterminer(
         self,
         stampSize=None,
+        kernelSize=None,
+        modelSize=25,
         debugStarData=False,
         useCoordinates='pixel',
         downsample=False,
@@ -204,6 +238,19 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ----------
         stampSize : `int`, optional
             Set ``config.stampSize`` to this, if not None.
+        kernelSize : `int`, optional
+            Cutout size for the PSF candidates. This is unused if ``stampSize``
+            if provided and its value is used for cutout size instead.
+        modelSize : `int`, optional
+            Internal model size for PIFF.
+        debugStarData : `bool`, optional
+            Include star images used for fitting in PSF model object?
+        useCoordinates : `str`, optional
+            Spatial coordinates to regress against for PSF modelling.
+        downsample : `bool`, optional
+            Whether to downsample the PSF candidates before modelling?
+        withlog : `bool`, optional
+            Should Piff produce chatty log messages?
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -220,14 +267,18 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.starSelector = starSelectorClass(config=starSelectorConfig)
 
         makePsfCandidatesConfig = measAlg.MakePsfCandidatesTask.ConfigClass()
+        if kernelSize:
+            makePsfCandidatesConfig.kernelSize = kernelSize
         if stampSize is not None:
             makePsfCandidatesConfig.kernelSize = stampSize
+
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
         psfDeterminerConfig.spatialOrder = 1
-        if stampSize is not None:
-            psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.stampSize = stampSize
+        psfDeterminerConfig.modelSize = modelSize
+
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
         if downsample:
@@ -237,7 +288,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         self.psfDeterminer = PiffPsfDeterminerTask(psfDeterminerConfig)
 
-    def subtractStars(self, exposure, catalog, chi_lim=-1):
+    def subtractStars(self, exposure, catalog, chi_lim=-1.):
         """Subtract the exposure's PSF from all the sources in catalog"""
         mi, psf = exposure.getMaskedImage(), exposure.getPsf()
 
@@ -307,7 +358,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             chiLim = 7.0
         else:
             numAvail = len(psfCandidateList)
-            chiLim = 6.1
+            chiLim = 6.4
 
         self.assertEqual(metadata['numAvailStars'], numAvail)
         self.assertEqual(sum(self.catalog['use_psf']), metadata['numGoodStars'])
@@ -385,10 +436,6 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff with debugStarData=True."""
         self.checkPiffDeterminer(debugStarData=True)
 
-    def testPiffDeterminer_skyCoords(self):
-        """Test Piff sky coords."""
-        self.checkPiffDeterminer(useCoordinates='sky')
-
     def testPiffDeterminer_downsample(self):
         """Test Piff determiner with downsampling."""
         self.checkPiffDeterminer(downsample=True)
@@ -396,6 +443,47 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_withlog(self):
         """Test Piff determiner with chatty logs."""
         self.checkPiffDeterminer(withlog=True)
+
+    def testPiffDeterminer_stampSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(stampSize=26)
+
+    def testPiffDeterminer_modelSize26(self):
+        """Test Piff with a psf stampSize of 26."""
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(modelSize=26, stampSize=25)
+
+    def testPiffDeterminer_skyCoords(self):
+        """Test Piff sky coords."""
+
+        self.checkPiffDeterminer(useCoordinates='sky')
+
+    @lsst.utils.tests.methodParameters(angle_degrees=[0, 35, 77, 135])
+    def testPiffDeterminer_skyCoords_with_rotation(self, angle_degrees):
+        """Test Piff sky coords with rotation."""
+
+        wcs = make_wcs(angle_degrees=angle_degrees)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
+
+    # TODO: Merge this case with the above in DM-44467.
+    @unittest.skipUnless(version.parse(galsim.version) >= version.parse("2.5.2"),
+                         reason="Requires GalSim >= 2.5.2",
+                         )
+    def testPiffDeterminer_skyCoords_rot45(self):
+        """Test Piff sky coords."""
+
+        wcs = make_wcs(angle_degrees=45)
+        self.exposure.setWcs(wcs)
+        self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
+
+    def testPiffDeterminer_skyCoords_failure(self, angle_degrees=135):
+        """Test that using small PSF candidates with sky coordinates fails."""
+        wcs = make_wcs(angle_degrees=angle_degrees)
+        self.exposure.setWcs(wcs)
+        with self.assertRaises(ValueError):
+            self.checkPiffDeterminer(useCoordinates='sky', stampSize=15)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
