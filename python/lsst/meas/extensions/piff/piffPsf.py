@@ -22,6 +22,8 @@
 __all__ = ["PiffPsf"]
 
 import pickle
+import piff
+from packaging.version import Version
 import numpy as np
 from lsst.afw.typehandling import StorableHelperFactory
 from lsst.meas.algorithms import ImagePsf
@@ -64,7 +66,16 @@ class PiffPsf(ImagePsf):
 
     @staticmethod
     def _read(pkl):
-        return PiffPsf(*pickle.loads(pkl))
+        width, height, piffResult = pickle.loads(pkl)
+        # We need to do surgery on pickles created with earlier versions of
+        # piff when using piff version 1.4 or later.
+        if Version(piff.version) >= Version("1.4"):
+            if not hasattr(piffResult, "_num"):
+                piffResult._num = None
+                piffResult.model._num = None
+                piffResult.model._fit_flux = None
+                piffResult.interp._num = None
+        return PiffPsf(width, height, piffResult)
 
     # ImagePsf overrides
 

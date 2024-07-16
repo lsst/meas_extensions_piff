@@ -19,7 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from pathlib import Path
+
 import galsim  # noqa: F401
+import piff
 import unittest
 import numpy as np
 import copy
@@ -38,7 +41,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
-from packaging import version
+from packaging.version import Version
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -424,6 +427,46 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                     newPsf.computeImage(newPsf.getAveragePosition())
                 )
 
+    def testReadOldPiffVersions(self):
+        """Test we can read psfs serialized with older versions of Piff."""
+        point_names = [
+            (geom.Point2D(0, 0), "psfIm_0_0.fits"),
+            (geom.Point2D(10, 100), "psfIm_10_100.fits"),
+            (geom.Point2D(-200, 30), "psfIm_-200_30.fits"),
+            (geom.Point2D(float("nan")), "psfIm_nan.fits"),
+        ]
+
+        if False:  # Documenting block that created the test data...
+            # Specifically interested in the case where the PSF is created with
+            # piff older than v1.4
+            assert Version(piff.version) < Version("1.4")
+
+            self.setupDeterminer()
+            stars = self.starSelector.run(self.catalog, exposure=self.exposure)
+            psfCandidateList = self.makePsfCandidates.run(
+                stars.sourceCat,
+                exposure=self.exposure
+            ).psfCandidates
+            psf, _ = self.psfDeterminer.determinePsf(
+                self.exposure,
+                psfCandidateList,
+            )
+            self.exposure.setPsf(psf)
+
+            path = Path(__file__).parent / "data" / "exp.fits"
+            self.exposure.writeFits(str(path))
+            for point, name in point_names:
+                psfIm = psf.computeImage(point)
+                psfIm.writeFits(str(path.with_name(name)))
+
+        path = Path(__file__).parent / "data" / "exp.fits"
+        exposure = afwImage.ExposureF(str(path))
+        for point, name in point_names:
+            self.assertImagesAlmostEqual(
+                afwImage.ImageF(str(path.with_name(name))),
+                exposure.getPsf().computeImage(point)
+            )
+
     def testPiffDeterminer_default(self):
         """Test piff with the default config."""
         self.checkPiffDeterminer()
@@ -468,7 +511,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
 
     # TODO: Merge this case with the above in DM-44467.
-    @unittest.skipUnless(version.parse(galsim.version) >= version.parse("2.5.2"),
+    @unittest.skipUnless(Version(galsim.version) >= Version("2.5.2"),
                          reason="Requires GalSim >= 2.5.2",
                          )
     def testPiffDeterminer_skyCoords_rot45(self):
