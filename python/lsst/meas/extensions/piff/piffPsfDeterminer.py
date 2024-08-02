@@ -322,7 +322,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
     def determinePsf(
-        self, exposure, psfCandidateList, metadata=None, flagKey=None
+        self, exposure, psfCandidateList, color=None, metadata=None, flagKey=None
     ):
         """Determine a Piff PSF model for an exposure given a list of PSF
         candidates.
@@ -334,6 +334,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCandidateList : `list` of `lsst.meas.algorithms.PsfCandidate`
            A sequence of PSF candidates typically obtained by detecting sources
            and then running them through a star selector.
+        color : `ndarray` of `float`, `list`, or `None`, optional
         metadata : `lsst.daf.base import PropertyList` or `None`, optional
            A home for interesting tidbits of information.
         flagKey : `str` or `None`, optional
@@ -346,7 +347,17 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
-        psfCandidateList = self.downsampleCandidates(psfCandidateList)
+
+        psfCandidateList, color = self.downsampleCandidates(psfCandidateList, paramsCandidateList=color)
+
+        # TO DO: Dummy colors are being passed to the function.  This is temporary. Need to remove it.
+        if color is None:
+            color = np.zeros(len(psfCandidateList))
+
+        if color is None:
+            use_color = False
+        else:
+            use_color = True
 
         if self.config.stampSize:
             stampSize = self.config.stampSize
@@ -365,6 +376,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
+                keys = ['u', 'v']
 
             case 'sky':
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
@@ -375,13 +387,22 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     ra*galsim.degrees,
                     dec*galsim.degrees
                 )
+                # TO DO: Not sure if this working like that right now. Need to check.
+                keys = ['ra', 'dec']
 
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
+                keys = ['x', 'y']
+
+        if use_color:
+            # TO DO: in DES they are using different polynomial order for different keys.
+            # Need to implement that.
+            keys.append('color')
+            orders = [self.config.spatialOrder] * len(keys)
 
         stars = []
-        for candidate in psfCandidateList:
+        for candidate, col in zip(psfCandidateList, color):
             cmi = candidate.getMaskedImage(stampSize, stampSize)
             good = getGoodPixels(cmi, self.config.zeroWeightMaskBits)
             fracGood = np.sum(good)/good.size
@@ -402,11 +423,17 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             source = candidate.getSource()
             image_pos = galsim.PositionD(source.getX(), source.getY())
 
+            properties = {}
+
+            if use_color:
+                properties['color'] = col
+
             data = piff.StarData(
                 gsImage,
                 image_pos,
                 weight=gsWeight,
-                pointing=pointing
+                pointing=pointing,
+                properties=properties,
             )
             stars.append(piff.Star(data, None))
 
@@ -420,7 +447,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             },
             'interp': {
                 'type': 'BasisPolynomial',
-                'order': self.config.spatialOrder
+                'orders': orders,
+                'keys': keys,
             },
             'outliers': {
                 'type': 'Chisq',
