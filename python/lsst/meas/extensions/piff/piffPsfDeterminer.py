@@ -353,6 +353,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         else:
             psfCandidateList, color = self.downsampleCandidates(psfCandidateList, paramsCandidateList=color)
 
+        # TO DO: dummy color, need to remove, here for testing.
+        # if color is None:
+        #    np.random.seed(42)
+        #    color = np.random.normal(0, 1, len(psfCandidateList))
+
         if color is None:
             use_color = False
         else:

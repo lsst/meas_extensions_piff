@@ -86,11 +86,15 @@ class PiffPsf(ImagePsf):
         assert width == height
         return PiffPsf(width, height, self._piffResult)
 
-    def _doComputeImage(self, position, color):
-        return self._doImage(position, center=None)
+    def _doComputeImage(self, position, color, color_piff=None):
+        # TO DO: Need to make sure that color_piff is used correctly and
+        # understand why color is passed but not used.
+        return self._doImage(position, center=None, color_piff=color_piff)
 
-    def _doComputeKernelImage(self, position, color):
-        return self._doImage(position, center=True)
+    def _doComputeKernelImage(self, position, color, color_piff=None):
+        # TO DO: Need to make sure that color_piff is used correctly and
+        # understand why color is passed but not used.
+        return self._doImage(position, center=True, color_piff=color_piff)
 
     def _doComputeBBox(self, position, color):
         return self._doBBox(Point2I(0, 0), center=True)
@@ -104,12 +108,23 @@ class PiffPsf(ImagePsf):
 
     # Internal private methods
 
-    def _doImage(self, position, center):
+    def _doImage(self, position, center, color_piff=None):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
+
+        color_interp = 'color' in self._piffResult.interp_property_names
+
+        if color_piff is not None and color_interp:
+            kwargs = {"color": color_piff}
+        elif color_piff is None and color_interp:
+            # TO DO: This is a hack, need a better way
+            # when no color information.
+            kwargs = {"color": 0.}
+        else:
+            kwargs = {}
         gsimg = self._piffResult.draw(
-            position.x, position.y, stamp_size=self.width, center=center
+            position.x, position.y, stamp_size=self.width, center=center, **kwargs,
         )
         bbox = self._doBBox(position, center)
         img = Image(bbox, dtype=np.float64)
