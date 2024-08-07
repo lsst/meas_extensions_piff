@@ -502,22 +502,11 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         self.checkPiffDeterminer(useCoordinates='sky')
 
-    @lsst.utils.tests.methodParameters(angle_degrees=[0, 35, 77, 135])
+    @lsst.utils.tests.methodParameters(angle_degrees=[0, 35, 45, 77, 135])
     def testPiffDeterminer_skyCoords_with_rotation(self, angle_degrees):
         """Test Piff sky coords with rotation."""
 
         wcs = make_wcs(angle_degrees=angle_degrees)
-        self.exposure.setWcs(wcs)
-        self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
-
-    # TODO: Merge this case with the above in DM-44467.
-    @unittest.skipUnless(Version(galsim.version) >= Version("2.5.2"),
-                         reason="Requires GalSim >= 2.5.2",
-                         )
-    def testPiffDeterminer_skyCoords_rot45(self):
-        """Test Piff sky coords."""
-
-        wcs = make_wcs(angle_degrees=45)
         self.exposure.setWcs(wcs)
         self.checkPiffDeterminer(useCoordinates='sky', kernelSize=35)
 
