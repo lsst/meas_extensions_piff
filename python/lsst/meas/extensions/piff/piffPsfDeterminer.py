@@ -86,16 +86,16 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     )
     outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection",
-        default=4.0
+        default=5.5 # DES Y3 value
     )
     outlierMaxRemove = pexConfig.Field[float](
         doc="Max fraction of stars to remove as outliers each iteration",
-        default=0.05
+        default=0.01 # DES Y3 value
     )
     maxSNR = pexConfig.Field[float](
         doc="Rescale the weight of bright stars such that their SNR is less "
             "than this value.",
-        default=200.0
+        default=100.0 # DES Y3 value
     )
     zeroWeightMaskBits = pexConfig.ListField[str](
         doc="List of mask bits for which to set pixel weights to zero.",
