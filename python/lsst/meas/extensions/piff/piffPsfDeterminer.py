@@ -357,7 +357,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             self.log.debug("stampSize not set.  Using candidate size.")
             stampSize = psfCandidateList[0].getWidth()
 
-        scale = exposure.getWcs().getPixelScale().asArcseconds()
+        scale = exposure.getWcs().getPixelScale(exposure.getBBox().getCenter()).asArcseconds()
 
         match self.config.useCoordinates:
             case 'field':
