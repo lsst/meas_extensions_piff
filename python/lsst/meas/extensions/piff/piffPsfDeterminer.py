@@ -73,24 +73,29 @@ def _validateGalsimInterpolant(name: str) -> bool:
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     spatialOrder = pexConfig.Field[int](
-        doc="specify spatial order for PSF kernel creation",
+        doc="Spatial order for PSF kernel creation. "
+        "Ignored if piffPsfConfigYaml is set.",
         default=2,
     )
     samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
-        "e.g. 0.5 is equal to 2x oversampling",
+        "e.g. 0.5 is equal to 2x oversampling. This affects only the size of "
+        "the PSF model stamp if piffPsfConfigYaml is set.",
         default=1,
     )
     modelSize = pexConfig.Field[int](
-        doc="Internal model size for PIFF (typically odd, but not enforced)",
+        doc="Internal model size for PIFF (typically odd, but not enforced). "
+        "Partially ignored if piffPsfConfigYaml is set.",
         default=25,
     )
     outlierNSigma = pexConfig.Field[float](
-        doc="n sigma for chisq outlier rejection",
+        doc="n sigma for chisq outlier rejection. "
+        "Ignored if piffPsfConfigYaml is set.",
         default=4.0
     )
     outlierMaxRemove = pexConfig.Field[float](
-        doc="Max fraction of stars to remove as outliers each iteration",
+        doc="Max fraction of stars to remove as outliers each iteration. "
+        "Ignored if piffPsfConfigYaml is set.",
         default=0.05
     )
     maxSNR = pexConfig.Field[float](
@@ -110,7 +115,8 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         doc="GalSim interpolant name for Piff to use. "
             "Options include 'Lanczos(N)', where N is an integer, along with "
             "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
-            "galsim.Quintic, and galsim.SincInterpolant.",
+            "galsim.Quintic, and galsim.SincInterpolant. Ignored if "
+            "piffPsfConfigYaml is set.",
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
