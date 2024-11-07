@@ -26,6 +26,7 @@ import piff
 import galsim
 import re
 import logging
+import yaml
 
 import lsst.utils.logging
 from lsst.afw.cameraGeom import PIXELS, FIELD_ANGLE
@@ -133,6 +134,12 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default=0,
         min=0,
         max=3,
+    )
+    piffPsfConfigYaml = pexConfig.Field[str](
+        doc="Configuration file for PIFF in YAML format. This overrides many "
+        "other settings in this config and is not validated ahead of runtime.",
+        default=None,
+        optional=True,
     )
 
     def setDefaults(self):
@@ -410,24 +417,27 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             )
             stars.append(piff.Star(data, None))
 
-        piffConfig = {
-            'type': "Simple",
-            'model': {
-                'type': 'PixelGrid',
-                'scale': scale * self.config.samplingSize,
-                'size': self.config.modelSize,
-                'interp': self.config.interpolant
-            },
-            'interp': {
-                'type': 'BasisPolynomial',
-                'order': self.config.spatialOrder
-            },
-            'outliers': {
-                'type': 'Chisq',
-                'nsigma': self.config.outlierNSigma,
-                'max_remove': self.config.outlierMaxRemove
+        if self.config.piffPsfConfigYaml is None:
+            piffConfig = {
+                'type': 'Simple',
+                'model': {
+                    'type': 'PixelGrid',
+                    'scale': scale * self.config.samplingSize,
+                    'size': self.config.modelSize,
+                    'interp': self.config.interpolant,
+                },
+                'interp': {
+                    'type': 'BasisPolynomial',
+                    'order': self.config.spatialOrder,
+                },
+                'outliers': {
+                    'type': 'Chisq',
+                    'nsigma': self.config.outlierNSigma,
+                    'max_remove': self.config.outlierMaxRemove,
+                }
             }
-        }
+        else:
+            piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
