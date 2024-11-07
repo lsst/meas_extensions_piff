@@ -474,6 +474,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_stampSize27(self):
         """Test Piff with a psf stampSize of 27."""
         self.checkPiffDeterminer(stampSize=27)
+        self.assertEqual(
+            self.exposure.psf.computeKernelImage(self.exposure.getBBox().getCenter()).getDimensions(),
+            geom.Extent2I(27, 27),
+        )
 
     def testPiffDeterminer_debugStarData(self):
         """Test Piff with debugStarData=True."""
