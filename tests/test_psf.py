@@ -232,6 +232,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         modelSize=25,
         debugStarData=False,
         useCoordinates='pixel',
+        piffPsfConfigYaml=None,
         downsample=False,
         withlog=False,
     ):
@@ -284,6 +285,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
+        psfDeterminerConfig.piffPsfConfigYaml = piffPsfConfigYaml
         if downsample:
             psfDeterminerConfig.maxCandidates = 10
         if withlog:
@@ -474,6 +476,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffDeterminer_stampSize27(self):
         """Test Piff with a psf stampSize of 27."""
         self.checkPiffDeterminer(stampSize=27)
+        self.assertEqual(
+            self.exposure.psf.computeKernelImage(self.exposure.getBBox().getCenter()).getDimensions(),
+            geom.Extent2I(27, 27),
+        )
 
     def testPiffDeterminer_debugStarData(self):
         """Test Piff with debugStarData=True."""
@@ -516,6 +522,32 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure.setWcs(wcs)
         with self.assertRaises(ValueError):
             self.checkPiffDeterminer(useCoordinates='sky', stampSize=15)
+
+
+class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):
+    """A test case to trigger the codepath that uses piffPsfConfigYaml."""
+
+    def checkPiffDeterminer(self, **kwargs):
+        # Docstring inherited.
+        if "piffPsfConfigYaml" not in kwargs:
+            piffPsfConfigYaml = """
+                # A minimal Piff config corresponding to the defaults.
+                type: Simple
+                model:
+                  type: PixelGrid
+                  scale: 0.2
+                  size: 25
+                  interp: Lanczos(11)
+                interp:
+                  type: BasisPolynomial
+                  order: 1
+                outliers:
+                  type: Chisq
+                  nsigma: 4.0
+                  max_remove: 0.05
+                """
+            kwargs["piffPsfConfigYaml"] = piffPsfConfigYaml
+        return super().checkPiffDeterminer(**kwargs)
 
 
 class PiffConfigTestCase(lsst.utils.tests.TestCase):
