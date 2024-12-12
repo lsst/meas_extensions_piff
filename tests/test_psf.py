@@ -499,7 +499,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.checkPiffDeterminer(stampSize=26)
 
     def testPiffDeterminer_modelSize26(self):
-        """Test Piff with a psf stampSize of 26."""
+        """Test Piff with a psf modelSize of 26."""
         with self.assertRaises(ValueError):
             self.checkPiffDeterminer(modelSize=26, stampSize=25)
 

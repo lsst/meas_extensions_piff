@@ -88,6 +88,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "Partially ignored if piffPsfConfigYaml is set.",
         default=25,
     )
+    stampSize = pexConfig.Field[int](
+        doc="Stamp size of the fitted PSF stars."
+        "Need to be bigger or equal to modelSize * samplingSize",
+        default=25,
+    )
     outlierNSigma = pexConfig.Field[float](
         doc="n sigma for chisq outlier rejection. "
         "Ignored if piffPsfConfigYaml is set.",
@@ -157,21 +162,31 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         # stampSize should also be at least sqrt(2)*modelSize/samplingSize so
         # that rotated images have support in the model
 
-        self.stampSize = 25
         # Resize the stamp to accommodate the model, but only if necessary.
         if self.useCoordinates == "sky":
-            self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
+            self.stampSize = max(self.stampSize, 2*int(0.5*self.modelSize*np.sqrt(2)*self.samplingSize) + 1)
 
     def validate(self):
         super().validate()
+
+        if self.modelSize * self.samplingSize < 25:
+            msg = (
+                "stampSize should be at least 25 pixels so that: "
+                "i) aperture flux with 12 pixel radius can be "
+                "compared to PSF flux. "
+                "ii) fake sources injected to match the 12 pixel aperture "
+                "flux get measured correctly. "
+                f"current stampSize: {self.stampSize}"
+            )
+            raise pexConfig.FieldValidationError(self.__class__.stampSize, self, msg)
 
         if (stamp_size := self.stampSize) is not None:
             model_size = self.modelSize
             sampling_size = self.samplingSize
             if self.useCoordinates == 'sky':
-                min_stamp_size = int(np.sqrt(2) * model_size / sampling_size)
+                min_stamp_size = int(np.sqrt(2) * model_size * sampling_size)
             else:
-                min_stamp_size = int(model_size / sampling_size)
+                min_stamp_size = int(model_size * sampling_size)
 
             if stamp_size < min_stamp_size:
                 msg = (f"PIFF model size of {model_size} is too large for stamp size {stamp_size}. "
@@ -449,7 +464,21 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         wcs = {0: gswcs}
 
         piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
-        drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
+
+        # I want the drawSize to be smaller than stampSize.
+        # Idea is to have large stampSize, modelSize*samplingSize<=stampSize
+        # and drawSize < modelSize * samplingSize
+        if self.config.piffPsfConfigYaml is None:
+            drawSize = 2 * np.floor(0.5 * self.config.modelSize * self.config.samplingSize) + 1
+        else:
+            # PixelGrid need that as an input so they must exist in
+            # the config.
+            samplingSize = piffConfig['scale'] / scale
+            modelSize = piffConfig['model']['size']
+            drawSize = 2 * np.floor(0.5 * modelSize * samplingSize) + 1
+        if drawSize > modelSize * samplingSize:
+            # keep odd grid.
+            drawSize -= 2
 
         used_image_pos = [s.image_pos for s in piffResult.stars]
         if flagKey:
