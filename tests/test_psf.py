@@ -227,9 +227,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
     def setupDeterminer(
         self,
-        stampSize=None,
+        stampSize=36,  # Was setup automatically before DM-48104.
         kernelSize=None,
         modelSize=25,
+        samplingSize=1.,
         debugStarData=False,
         useCoordinates='pixel',
         piffPsfConfigYaml=None,
@@ -282,6 +283,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         psfDeterminerConfig.spatialOrder = 1
         psfDeterminerConfig.stampSize = stampSize
         psfDeterminerConfig.modelSize = modelSize
+        psfDeterminerConfig.samplingSize = samplingSize
 
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
@@ -478,7 +480,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.checkPiffDeterminer(stampSize=27)
         self.assertEqual(
             self.exposure.psf.computeKernelImage(self.exposure.getBBox().getCenter()).getDimensions(),
-            geom.Extent2I(27, 27),
+            geom.Extent2I(25, 25),
         )
 
     def testPiffDeterminer_debugStarData(self):
@@ -493,15 +495,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         """Test Piff determiner with chatty logs."""
         self.checkPiffDeterminer(withlog=True)
 
-    def testPiffDeterminer_stampSize26(self):
-        """Test Piff with a psf stampSize of 26."""
+    def testPiffDeterminer_stampSize24(self):
+        """Test Piff with a psf stampSize of 24."""
         with self.assertRaises(ValueError):
-            self.checkPiffDeterminer(stampSize=26)
+            self.checkPiffDeterminer(stampSize=24)
 
     def testPiffDeterminer_modelSize26(self):
-        """Test Piff with a psf stampSize of 26."""
+        """Test Piff with a psf modelSize of 26."""
         with self.assertRaises(ValueError):
-            self.checkPiffDeterminer(modelSize=26, stampSize=25)
+            self.checkPiffDeterminer(stampSize=25, modelSize=26)
 
     def testPiffDeterminer_skyCoords(self):
         """Test Piff sky coords."""
