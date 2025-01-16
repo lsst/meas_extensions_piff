@@ -450,6 +450,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 'interp': {
                     'type': 'BasisPolynomial',
                     'order': self.config.spatialOrder,
+                    'solver': 'cpp',
                 },
                 'outliers': {
                     'type': 'Chisq',
@@ -469,13 +470,15 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         # Idea is to have large stampSize, modelSize*samplingSize<=stampSize
         # and drawSize < modelSize * samplingSize
         if self.config.piffPsfConfigYaml is None:
-            drawSize = 2 * np.floor(0.5 * self.config.modelSize * self.config.samplingSize) + 1
+            modelSize = self.config.modelSize
+            samplingSize = self.config.samplingSize
         else:
             # PixelGrid need that as an input so they must exist in
             # the config.
-            samplingSize = piffConfig['scale'] / scale
+            samplingSize = piffConfig['model']['scale'] / scale
             modelSize = piffConfig['model']['size']
-            drawSize = 2 * np.floor(0.5 * modelSize * samplingSize) + 1
+
+        drawSize = 2 * np.floor(0.5 * modelSize * samplingSize) + 1
         if drawSize > modelSize * samplingSize:
             # keep odd grid.
             drawSize -= 2
