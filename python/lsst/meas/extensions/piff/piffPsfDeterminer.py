@@ -120,6 +120,10 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
+    zerothOrderInterpNotEnoughStars = pexConfig.Field[bool](
+        doc="If True, use zeroth order interpolation if not enough stars are found.",
+        default=False
+    )
     debugStarData = pexConfig.Field[bool](
         doc="Include star images used for fitting in PSF model object.",
         default=False
@@ -445,6 +449,25 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         else:
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
+        def _get_threshold(nth_order):
+            # number of free parameter in the polynomial interpolation
+            freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
+            return freeParameters
+
+        if self.config.zerothOrderInterpNotEnoughStars:
+            if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
+                threshold = _get_threshold(piffConfig['interp']['order'])
+                if len(stars) <= threshold:
+                    self.log.warning(
+                        f"Only {len(stars)} stars found, "
+                        f"but {threshold} required. Using zeroth order interpolation."
+                    )
+                    piffConfig['interp']['order'] = 0
+                    # No need to do any outlier rejection assume
+                    # PSF to be average of few stars.
+                    piffConfig['max_iter'] = 1
+
+        self._piffConfig = piffConfig
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
 

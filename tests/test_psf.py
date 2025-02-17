@@ -232,6 +232,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         modelSize=25,
         debugStarData=False,
         useCoordinates='pixel',
+        spatialOrder=1,
+        zerothOrderInterpNotEnoughStars=False,
         piffPsfConfigYaml=None,
         downsample=False,
         withlog=False,
@@ -251,6 +253,12 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             Include star images used for fitting in PSF model object?
         useCoordinates : `str`, optional
             Spatial coordinates to regress against for PSF modelling.
+        spatialOrder : `int`, optional
+            Spatial order for PSF parameter interpolation.
+        zerothOrderInterpNotEnoughStars : `bool`, optional
+            If True, use zeroth order interpolation if not enough star.
+        piffPsfConfigYaml : `str`, optional
+            Configuration file for PIFF in YAML format.
         downsample : `bool`, optional
             Whether to downsample the PSF candidates before modelling?
         withlog : `bool`, optional
@@ -279,13 +287,20 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.makePsfCandidates = measAlg.MakePsfCandidatesTask(config=makePsfCandidatesConfig)
 
         psfDeterminerConfig = PiffPsfDeterminerConfig()
-        psfDeterminerConfig.spatialOrder = 1
+        psfDeterminerConfig.spatialOrder = spatialOrder
+        psfDeterminerConfig.zerothOrderInterpNotEnoughStars = zerothOrderInterpNotEnoughStars
         psfDeterminerConfig.stampSize = stampSize
         psfDeterminerConfig.modelSize = modelSize
 
         psfDeterminerConfig.debugStarData = debugStarData
         psfDeterminerConfig.useCoordinates = useCoordinates
         psfDeterminerConfig.piffPsfConfigYaml = piffPsfConfigYaml
+
+        if piffPsfConfigYaml is None:
+            self.useYaml = False
+        else:
+            self.useYaml = True
+
         if downsample:
             psfDeterminerConfig.maxCandidates = 10
         if withlog:
@@ -335,13 +350,21 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         logger = logging.getLogger("lsst.psfDeterminer.Piff")
 
         with self.assertLogs("lsst.psfDeterminer.Piff.piff", logging.WARNING) as cm:
-            with self.assertNoLogs("lsst.psfDeterminer.Piff", logging.WARNING):
+            if kwargs.get("zerothOrderInterpNotEnoughStars", False):
                 psf, cellSet = self.psfDeterminer.determinePsf(
                     self.exposure,
                     psfCandidateList,
                     metadata,
                     flagKey=self.usePsfFlag
                 )
+            else:
+                with self.assertNoLogs("lsst.psfDeterminer.Piff", logging.WARNING):
+                    psf, cellSet = self.psfDeterminer.determinePsf(
+                        self.exposure,
+                        psfCandidateList,
+                        metadata,
+                        flagKey=self.usePsfFlag
+                    )
 
         # Check that the iterations are being logged.
         logged = "\n".join(cm.output)
@@ -361,6 +384,9 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             # good so the chi2 test limit needs to be modified.
             numAvail = self.psfDeterminer.config.maxCandidates
             chiLim = 7.0
+        elif kwargs.get("zerothOrderInterpNotEnoughStars", False):
+            numAvail = len(psfCandidateList)
+            chiLim = 20.31
         else:
             numAvail = len(psfCandidateList)
             chiLim = 6.4
@@ -522,6 +548,16 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.exposure.setWcs(wcs)
         with self.assertRaises(ValueError):
             self.checkPiffDeterminer(useCoordinates='sky', stampSize=15)
+
+    def testPiffZerothOrderInterpNotEnoughStars(self):
+        self.checkPiffDeterminer(spatialOrder=4, zerothOrderInterpNotEnoughStars=True)
+        if not self.useYaml:
+            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], 0)
+            self.assertEqual(self.psfDeterminer._piffConfig['max_iter'], 1)
+        else:
+            # Yaml will overwrite input value.
+            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], 1)
+            self.assertNotIn('max_iter', self.psfDeterminer._piffConfig)
 
 
 class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):
