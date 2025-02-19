@@ -439,6 +439,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 'interp': {
                     'type': 'BasisPolynomial',
                     'order': self.config.spatialOrder,
+                    'solver': 'cpp',
                 },
                 'outliers': {
                     'type': 'Chisq',
