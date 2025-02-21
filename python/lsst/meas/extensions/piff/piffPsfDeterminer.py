@@ -77,6 +77,18 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "Ignored if piffPsfConfigYaml is set.",
         default=2,
     )
+    piffBasisPolynomialSolver = pexConfig.ChoiceField[str](
+        doc="Solver to solve linear algebra for "
+        "the spatial interpolation of the PSF. "
+        "Ignore if piffPsfConfigYaml is not None.",
+        allowed=dict(
+            scipy="Default solver using scipy.",
+            cpp="C++ solver using eigen.",
+            jax="JAX solver.",
+            qr="QR decomposition using scipy/numpy.",
+        ),
+        default="scipy",
+    )
     samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
         "e.g. 0.5 is equal to 2x oversampling. This affects only the size of "
@@ -136,6 +148,12 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
             sky='Regress against RA/Dec'
         ),
         default='pixel'
+    )
+    piffMaxIter = pexConfig.Field[int](
+        doc="Maximum iteration while doing outlier rejection."
+        "Might be overwrite if zerothOrderInterpNotEnoughStars is True and "
+        "ignore if piffPsfConfigYaml is not None.",
+        default=15
     )
     piffLoggingLevel = pexConfig.RangeField[int](
         doc="PIFF-specific logging level, from 0 (least chatty) to 3 (very verbose); "
@@ -439,13 +457,14 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 'interp': {
                     'type': 'BasisPolynomial',
                     'order': self.config.spatialOrder,
-                    'solver': 'cpp',
+                    'solver': self.config.piffBasisPolynomialSolver,
                 },
                 'outliers': {
                     'type': 'Chisq',
                     'nsigma': self.config.outlierNSigma,
                     'max_remove': self.config.outlierMaxRemove,
-                }
+                },
+                'max_iter': self.config.piffMaxIter
             }
         else:
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
