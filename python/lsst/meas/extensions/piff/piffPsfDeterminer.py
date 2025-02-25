@@ -89,6 +89,13 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         ),
         default="scipy",
     )
+    piffPixelGridFitCenter = pexConfig.Field[bool](
+        doc="PixelGrid can re-estimate center if this option is True. "
+        "Will use provided centroid if set to False. Default in Piff "
+        "is set to True. Depends on how input centroids can be trust. "
+        "Ignore if piffPsfConfigYaml is not None.",
+        default=True
+    )
     samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
         "e.g. 0.5 is equal to 2x oversampling. This affects only the size of "
@@ -453,6 +460,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     'scale': scale * self.config.samplingSize,
                     'size': self.config.modelSize,
                     'interp': self.config.interpolant,
+                    'centered': self.config.piffPixelGridFitCenter,
                 },
                 'interp': {
                     'type': 'BasisPolynomial',
