@@ -430,12 +430,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
-    def _addStarColor(self, stars, exposure, fgcmCat):
+    def _addStarsColors(self, stars, exposure, fgcmCat):
 
         gswcs = CelestialWcsWrapper(exposure.getWcs())
         xPiff = np.array([star.x for star in stars])
         yPiff = np.array([star.y for star in stars])
-        raPiff, decPiff = gswcs.xyToradec(xPiff, yPiff)
+        raPiff, decPiff = gswcs.xyToradec(xPiff, yPiff, units="degree")
         raPiff = (raPiff * u.radian).to(u.degree).value
         decPiff = (decPiff * u.radian).to(u.degree).value
 
@@ -450,7 +450,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         magStr1 = self.config.color[0]
         magStr2 = self.config.color[1]
         colors = fgcmCat[f'mag_{magStr1}'] - fgcmCat[f'mag_{magStr2}']
-        stars = stars[idxStarCat]
         colors = colors[idxColorCat]
 
         # set to mean color when no data available.
@@ -458,10 +457,14 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         meanColor = np.mean(colors[isColor])
         colors[~isColor] = meanColor
 
-        for star, color in zip(stars, colors):
+        # stars = stars[idxStarCat]
+        newstars = []
+        for idx, color in zip(idxStarCat, colors):
+            star = stars[idx]
             star.data.properties['color'] = color
+            newstars.append(star)
 
-        return stars
+        return newstars
 
 
     def determinePsf(
@@ -566,7 +569,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         orders = [spatialOrder] * len(keys)
 
         if self.config.useColor:
-            stars = self._addStarColors(stars, exposure, fgcmCat)
+            stars = self._addStarsColors(stars, exposure, fgcmCat)
             keys.append('color')
             orders.append(self.config.colorOrder)
 
