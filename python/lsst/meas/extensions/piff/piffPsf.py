@@ -27,8 +27,9 @@ from packaging.version import Version
 import numpy as np
 from lsst.afw.typehandling import StorableHelperFactory
 from lsst.meas.algorithms import ImagePsf
-from lsst.afw.image import Image
+from lsst.afw.image import Image, Color
 from lsst.geom import Box2I, Point2I, Extent2I, Point2D
+import logging
 
 
 class PiffPsf(ImagePsf):
@@ -37,7 +38,7 @@ class PiffPsf(ImagePsf):
         "PiffPsf"
     )
 
-    def __init__(self, width, height, piffResult):
+    def __init__(self, width, height, piffResult, log=None):
         assert width == height
         ImagePsf.__init__(self)
         self.width = width
@@ -45,6 +46,8 @@ class PiffPsf(ImagePsf):
         self.dimensions = Extent2I(width, height)
         self._piffResult = piffResult
         self._averagePosition = None
+        self._averageColor = None
+        self.log = log or logging.getLogger(__name__)
 
     @property
     def piffResult(self):
@@ -87,10 +90,10 @@ class PiffPsf(ImagePsf):
         return PiffPsf(width, height, self._piffResult)
 
     def _doComputeImage(self, position, color):
-        return self._doImage(position, center=None)
+        return self._doImage(position, center=None, color=color)
 
     def _doComputeKernelImage(self, position, color):
-        return self._doImage(position, center=True)
+        return self._doImage(position, center=True, color=color)
 
     def _doComputeBBox(self, position, color):
         return self._doBBox(Point2I(0, 0), center=True)
@@ -104,14 +107,38 @@ class PiffPsf(ImagePsf):
             self._averagePosition = Point2D(x, y)
         return self._averagePosition
 
+    def getAverageColor(self):
+        if self._averageColor is None:
+            if 'color' in self._piffResult.interp_property_names:
+                c = np.mean([s.data.properties['color'] for s in self._piffResult.stars
+                             if not s.is_flagged and not s.is_reserve])
+                self._averageColor = Color(c)
+            else:
+                self._averageColor = Color()  # set value to nan.
+        return self._averageColor
+
     # Internal private methods
 
-    def _doImage(self, position, center):
+    def _doImage(self, position, center, color=None):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
+        if 'color' in self._piffResult.interp_property_names:
+            if color is None or color.isIndeterminate():
+                meanColor = np.nan
+                if self._averageColor is None:
+                    meanColor = self.getAverageColor().getColorValue()
+                else:
+                    meanColor = self._averageColor.getColorValue()
+                kwargs = {'color': meanColor}
+                self.log.warning("PSF model need a color information."
+                                 "Set to mean Color from PSF fit right now.")
+            else:
+                kwargs = {'color': color.getColorValue()}
+        else:
+            kwargs = {}
         gsimg = self._piffResult.draw(
-            position.x, position.y, stamp_size=self.width, center=center
+            position.x, position.y, stamp_size=self.width, center=center, **kwargs,
         )
         bbox = self._doBBox(position, center)
         img = Image(bbox, dtype=np.float64)
