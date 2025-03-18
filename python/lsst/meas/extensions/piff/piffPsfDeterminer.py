@@ -457,7 +457,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         meanColor = np.mean(colors[isColor])
         colors[~isColor] = meanColor
 
-        # stars = stars[idxStarCat]
         newstars = []
         for idx, color in zip(idxStarCat, colors):
             star = stars[idx]
