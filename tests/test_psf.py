@@ -237,6 +237,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         zerothOrderInterpNotEnoughStars=False,
         piffPsfConfigYaml=None,
         downsample=False,
+        useColor=False,
+        colorOrder=0,
         withlog=False,
     ):
         """Setup the starSelector and psfDeterminer
@@ -297,6 +299,9 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         psfDeterminerConfig.useCoordinates = useCoordinates
         psfDeterminerConfig.piffPsfConfigYaml = piffPsfConfigYaml
 
+        psfDeterminerConfig.colorOrder = colorOrder
+        psfDeterminerConfig.useColor = useColor
+
         if piffPsfConfigYaml is None:
             self.useYaml = False
         else:
@@ -347,6 +352,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             stars.sourceCat,
             exposure=self.exposure
         ).psfCandidates
+
+        for psf in psfCandidateList:
+            psf.setPsfColorValue(0.42)
+            psf.setPsfColorType("g-r")
 
         logger = logging.getLogger("lsst.psfDeterminer.Piff")
 
@@ -555,7 +564,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffZerothOrderInterpNotEnoughStars(self):
         self.checkPiffDeterminer(spatialOrder=4, zerothOrderInterpNotEnoughStars=True)
         if not self.useYaml:
-            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], 0)
+            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], [0, 0])
             self.assertEqual(self.psfDeterminer._piffConfig['max_iter'], 1)
         else:
             # Yaml will overwrite input value.
@@ -567,6 +576,11 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.checkPiffDeterminer(spatialOrder=42,
                                      zerothOrderInterpNotEnoughStars=False,
                                      piffPsfConfigYaml=None)
+
+    def testPiffDummyColorfit(self):
+        self.checkPiffDeterminer(useColor=True,
+                                 colorOrder=0,
+                                 piffPsfConfigYaml=None)
 
 
 class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):

@@ -176,6 +176,24 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         doc="Minimum fraction of unmasked pixels required to use star.",
         default=0.5
     )
+    useColor = pexConfig.Field[bool](
+        doc="Use color information to correct for amtospheric turbulences and "
+            "differential chromatic refraction."
+            "Ignored if piffPsfConfigYaml is set.",
+        default=False,
+    )
+    color = pexConfig.DictField(
+        doc="The bands to use for calculating color."
+        "Ignored if piffPsfConfigYaml is set.",
+        default={},
+        keytype=str,
+        itemtype=str,
+    )
+    colorOrder = pexConfig.Field[int](
+        doc="Color order for PSF kernel creation. "
+        "Ignored if piffPsfConfigYaml is set.",
+        default=1,
+    )
     interpolant = pexConfig.Field[str](
         doc="GalSim interpolant name for Piff to use. "
             "Options include 'Lanczos(N)', where N is an integer, along with "
@@ -410,7 +428,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
     def determinePsf(
-        self, exposure, psfCandidateList, metadata=None, flagKey=None
+        self, exposure, psfCandidateList, metadata=None, flagKey=None,
     ):
         """Determine a Piff PSF model for an exposure given a list of PSF
         candidates.
@@ -453,6 +471,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
+                keys = ['u', 'v']
 
             case 'sky':
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
@@ -463,10 +482,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     ra*galsim.degrees,
                     dec*galsim.degrees
                 )
+                keys = ['u', 'v']
 
             case 'pixel':
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
+                keys = ['x', 'y']
 
         stars = []
         for candidate in psfCandidateList:
@@ -499,16 +520,41 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             )
             star = piff.Star(data, None)
             star.data.properties['starId'] = starId
+            star.data.properties['colorValue'] = candidate.getPsfColorValue()
+            star.data.properties['colorType'] = candidate.getPsfColorType()
             stars.append(star)
 
-        if self.config.piffPsfConfigYaml is None:
-            # The following is mostly accommodating unittests that don't have
-            # the filter attribute set on the mock exposure.
-            if hasattr(exposure.filter, "bandLabel"):
-                band = exposure.filter.bandLabel
+        # The following is mostly accommodating unittests that don't have
+        # the filter attribute set on the mock exposure.
+        if hasattr(exposure.filter, "bandLabel"):
+            band = exposure.filter.bandLabel
+        else:
+            band = None
+        spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
+        orders = [spatialOrder] * len(keys)
+
+        if self.config.useColor:
+            colors = [s.data.properties['colorValue'] for s in stars
+                      if np.isfinite(s.data.properties['colorValue'])]
+            colorTypes = [s.data.properties['colorType'] for s in stars
+                          if np.isfinite(s.data.properties['colorValue'])]
+            if len(colors) == 0:
+                self.log.warning("No color informations for PSF candidates, Set PSF colors to 0s.")
+                meanColors = 0.
             else:
-                band = None
-            spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
+                meanColors = np.mean(colors)
+                colorType = list(set(colorTypes))
+                if len(colorType) > 1:
+                    raise ValueError(f"More than one colorType was providen:{colorType}")
+                colorType = colorType[0]
+            for s in stars:
+                if not np.isfinite(s.data.properties['colorValue']):
+                    s.data.properties['colorValue'] = meanColors
+                    s.data.properties['colorType'] = colorType
+            keys.append('colorValue')
+            orders.append(self.config.colorOrder)
+
+        if self.config.piffPsfConfigYaml is None:
             piffConfig = {
                 'type': 'Simple',
                 'model': {
@@ -520,7 +566,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 },
                 'interp': {
                     'type': 'BasisPolynomial',
-                    'order': spatialOrder,
+                    'order': orders,
+                    'keys': keys,
                     'solver': self.config.piffBasisPolynomialSolver,
                 },
                 'outliers': {
@@ -534,8 +581,14 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
         def _get_threshold(nth_order):
-            # number of free parameter in the polynomial interpolation
-            freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
+            if isinstance(nth_order, list):
+                # right now, nth_order[0] and nth_order[1] are the same.
+                freeParameters = ((nth_order[0] + 1) * (nth_order[0] + 2)) // 2
+                if len(nth_order) == 3:  # when color correction
+                    freeParameters += nth_order[2]
+            else:
+                # number of free parameter in the polynomial interpolation
+                freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
             return freeParameters
 
         if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
@@ -546,7 +599,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         "Only %d stars found, "
                         "but %d required. Using zeroth order interpolation."%((len(stars), threshold))
                     )
-                    piffConfig['interp']['order'] = 0
+                    piffConfig['interp']['order'] = [0] * len(keys)
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
@@ -556,7 +609,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         minimum_dof=threshold,
                         poly_ndim=piffConfig['interp']['order'],
                     )
-
         self._piffConfig = piffConfig
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
@@ -573,7 +625,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         "Only %d after outlier rejection, "
                         "but %d required. Using zeroth order interpolation."%((nUsedStars, threshold))
                     )
-                    piffConfig['interp']['order'] = 0
+                    piffConfig['interp']['order'] = [0] * len(keys)
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
