@@ -417,6 +417,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             star.data.properties['color'] = color
             newstars.append(star)
 
+        # TO DO: it looks like there are some stars with no match.
+        # TO DO: need to check what is going on because expect 300.
+        # TO DO: stars but does not looks to be the case.
+
         return newstars
 
 

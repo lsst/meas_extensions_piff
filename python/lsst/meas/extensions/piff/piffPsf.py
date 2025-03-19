@@ -29,6 +29,7 @@ from lsst.afw.typehandling import StorableHelperFactory
 from lsst.meas.algorithms import ImagePsf
 from lsst.afw.image import Image, Color
 from lsst.geom import Box2I, Point2I, Extent2I, Point2D
+import logging
 
 
 class PiffPsf(ImagePsf):
@@ -37,7 +38,7 @@ class PiffPsf(ImagePsf):
         "PiffPsf"
     )
 
-    def __init__(self, width, height, piffResult):
+    def __init__(self, width, height, piffResult, log=None):
         assert width == height
         ImagePsf.__init__(self)
         self.width = width
@@ -46,6 +47,7 @@ class PiffPsf(ImagePsf):
         self._piffResult = piffResult
         self._averagePosition = None
         self._averageColor = None
+        self.log = log or logging.getLogger(__name__)
 
     @property
     def piffResult(self):
@@ -123,8 +125,13 @@ class PiffPsf(ImagePsf):
         # None => draw as if star at position
         # True => draw in center of image
         if 'color' in self._piffResult.interp_property_names:
-            if color is None or np.isnan(color.getColorValue()):
-                raise ValueError("PSF model need a color information. Set to nan right now.")
+            if color is None or color.isIndeterminate():
+                if self._averageColor is None:
+                    meanColor = self.getAverageColor()
+                else:
+                    meanColor = self._averageColor
+                kwargs = {'color': meanColor}
+                self.log.warning("PSF model need a color information. Set to mean Color from PSF fit right now.")
             else:
                 kwargs = {'color': color.getColorValue()}
         else:
