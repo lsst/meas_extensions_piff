@@ -38,6 +38,7 @@ import lsst.afw.table as afwTable
 import lsst.daf.base as dafBase
 import lsst.geom as geom
 import lsst.meas.algorithms as measAlg
+from lsst.pipe.base import AlgorithmError
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
@@ -558,6 +559,12 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             # Yaml will overwrite input value.
             self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], 1)
             self.assertNotIn('max_iter', self.psfDeterminer._piffConfig)
+
+    def testPiffRaiseErrorNotEnoughStars(self):
+        with self.assertRaises(AlgorithmError):
+            self.checkPiffDeterminer(spatialOrder=42,
+                                     zerothOrderInterpNotEnoughStars=False,
+                                     piffPsfConfigYaml=None)
 
 
 class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):
