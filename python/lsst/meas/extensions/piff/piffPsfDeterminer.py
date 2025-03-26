@@ -72,9 +72,17 @@ def _validateGalsimInterpolant(name: str) -> bool:
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
+    spatialOrderPerBand = pexConfig.DictField(
+        doc="Per-band spatial order for PSF kernel creation. "
+        "Ignored if piffPsfConfigYaml is set.",
+        keytype=str,
+        itemtype=int,
+        default={},
+    )
     spatialOrder = pexConfig.Field[int](
         doc="Spatial order for PSF kernel creation. "
-        "Ignored if piffPsfConfigYaml is set.",
+        "Ignored if piffPsfConfigYaml is set or if the current "
+        "band is in the spatialOrderPerBand dict config.",
         default=2,
     )
     piffBasisPolynomialSolver = pexConfig.ChoiceField[str](
@@ -453,6 +461,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             stars.append(piff.Star(data, None))
 
         if self.config.piffPsfConfigYaml is None:
+            # The following is mostly accommodating unittests that don't have
+            # the filter attribute set on the mock exposure.
+            if hasattr(exposure.filter, "bandLabel"):
+                band = exposure.filter.bandLabel
+            else:
+                band = None
+            spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
             piffConfig = {
                 'type': 'Simple',
                 'model': {
@@ -464,7 +479,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 },
                 'interp': {
                     'type': 'BasisPolynomial',
-                    'order': self.config.spatialOrder,
+                    'order': spatialOrder,
                     'solver': self.config.piffBasisPolynomialSolver,
                 },
                 'outliers': {
@@ -485,7 +500,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         if self.config.zerothOrderInterpNotEnoughStars:
             if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
                 threshold = _get_threshold(piffConfig['interp']['order'])
-                if len(stars) <= threshold:
+                if len(stars) < threshold:
                     self.log.warning(
                         f"Only {len(stars)} stars found, "
                         f"but {threshold} required. Using zeroth order interpolation."
