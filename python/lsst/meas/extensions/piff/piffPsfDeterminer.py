@@ -583,7 +583,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
 
-        used_image_pos = [s.image_pos for s in piffResult.stars]
+        used_image_pos = [s.image_pos for s in piffResult.stars if not s.is_flagged and not s.is_reserve]
         if flagKey:
             for candidate in psfCandidateList:
                 source = candidate.getSource()
