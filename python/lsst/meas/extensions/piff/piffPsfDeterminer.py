@@ -540,8 +540,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             if len(stars) < threshold:
                 if self.config.zerothOrderInterpNotEnoughStars:
                     self.log.warning(
-                        f"Only {len(stars)} stars found, "
-                        f"but {threshold} required. Using zeroth order interpolation."
+                        "Only %d stars found, "
+                        "but %d required. Using zeroth order interpolation."%((len(stars), threshold))
                     )
                     piffConfig['interp']['order'] = 0
                     # No need to do any outlier rejection assume
@@ -560,9 +560,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
 
+        nUsedStars = len([s for s in piffResult.stars if not s.is_flagged and not s.is_reserve])
+
         if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
             threshold = _get_threshold(piffConfig['interp']['order'])
-            nUsedStars = len([s for s in piffResult.stars if not s.is_flagged and not s.is_reserve])
             if nUsedStars < threshold:
                 if self.config.zerothOrderInterpNotEnoughStars:
                     self.log.warning(
@@ -574,6 +575,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
                     piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
+                    nUsedStars = len(stars)
                 else:
                     raise PiffTooFewGoodStarsError(
                         num_good_stars=nUsedStars,
@@ -594,7 +596,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         if metadata is not None:
             metadata["spatialFitChi2"] = piffResult.chisq
             metadata["numAvailStars"] = len(stars)
-            metadata["numGoodStars"] = len(piffResult.stars)
+            metadata["numGoodStars"] = nUsedStars
             metadata["avgX"] = np.mean([p.x for p in piffResult.stars])
             metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
