@@ -488,6 +488,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             gsWeight.array[:] = weight
 
             source = candidate.getSource()
+            starId = source.getId()
             image_pos = galsim.PositionD(source.getX(), source.getY())
 
             data = piff.StarData(
@@ -496,7 +497,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 weight=gsWeight,
                 pointing=pointing
             )
-            stars.append(piff.Star(data, None))
+            star = piff.Star(data, None)
+            star.data.properties['starId'] = starId
+            stars.append(star)
 
         if self.config.piffPsfConfigYaml is None:
             # The following is mostly accommodating unittests that don't have
@@ -585,12 +588,16 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
 
-        used_image_pos = [s.image_pos for s in piffResult.stars if not s.is_flagged and not s.is_reserve]
+        used_image_starId = {s.data.properties['starId'] for s in piffResult.stars
+                             if not s.is_flagged and not s.is_reserve}
+
+        assert len(used_image_starId) == nUsedStars, "Star IDs are not unique"
+
         if flagKey:
             for candidate in psfCandidateList:
                 source = candidate.getSource()
-                posd = galsim.PositionD(source.getX(), source.getY())
-                if posd in used_image_pos:
+                starId = source.getId()
+                if starId in used_image_starId:
                     source.set(flagKey, True)
 
         if metadata is not None:
