@@ -597,8 +597,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["spatialFitChi2"] = piffResult.chisq
             metadata["numAvailStars"] = len(stars)
             metadata["numGoodStars"] = nUsedStars
-            metadata["avgX"] = np.mean([p.x for p in piffResult.stars])
-            metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
+            metadata["avgX"] = np.mean([s.x for s in piffResult.stars
+                                        if not s.is_flagged and not s.is_reserve])
+            metadata["avgY"] = np.mean([s.y for s in piffResult.stars
+                                        if not s.is_flagged and not s.is_reserve])
 
         if not self.config.debugStarData:
             for star in piffResult.stars:
