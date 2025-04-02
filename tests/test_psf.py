@@ -555,7 +555,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
     def testPiffZerothOrderInterpNotEnoughStars(self):
         self.checkPiffDeterminer(spatialOrder=4, zerothOrderInterpNotEnoughStars=True)
         if not self.useYaml:
-            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], 0)
+            self.assertEqual(self.psfDeterminer._piffConfig['interp']['order'], [0, 0])
             self.assertEqual(self.psfDeterminer._piffConfig['max_iter'], 1)
         else:
             # Yaml will overwrite input value.

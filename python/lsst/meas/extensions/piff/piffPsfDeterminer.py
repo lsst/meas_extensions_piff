@@ -568,6 +568,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             star.data.properties['starId'] = starId
             stars.append(star)
 
+        # The following is mostly accommodating unittests that don't have
+        # the filter attribute set on the mock exposure.
+        if hasattr(exposure.filter, "bandLabel"):
+            band = exposure.filter.bandLabel
+        else:
+            band = None
         spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
         orders = [spatialOrder] * len(keys)
 
@@ -577,12 +583,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             orders.append(self.config.colorOrder)
 
         if self.config.piffPsfConfigYaml is None:
-            # The following is mostly accommodating unittests that don't have
-            # the filter attribute set on the mock exposure.
-            if hasattr(exposure.filter, "bandLabel"):
-                band = exposure.filter.bandLabel
-            else:
-                band = None
             piffConfig = {
                 'type': 'Simple',
                 'model': {
@@ -609,8 +609,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
         def _get_threshold(nth_order):
-            # number of free parameter in the polynomial interpolation
-            freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
+            if type(nth_order) == list:
+                freeParameters = ((nth_order[0] + 1) * (nth_order[0] + 2)) // 2
+                if len(nth_order) == 3: # when color correction
+                    freeParameters += nth_order[2]
+            else:
+                # number of free parameter in the polynomial interpolation
+                freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
             return freeParameters
 
         if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
