@@ -33,6 +33,7 @@ from lsst.afw.cameraGeom import PIXELS, FIELD_ANGLE
 import lsst.pex.config as pexConfig
 import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
+from lsst.pipe.base import AlgorithmError
 from .piffPsf import PiffPsf
 from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
 
@@ -69,6 +70,43 @@ def _validateGalsimInterpolant(name: str) -> bool:
              ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
              }
     return name in names
+
+
+class PiffTooFewGoodStarsError(AlgorithmError):
+    """Raised if too few good stars are available for PSF determination.
+
+    Parameters
+    ----------
+    num_good_stars : `int`
+        Number of good stars used for PSF determination.
+    poly_ndim : `int`
+        Number of dependency parameters (dimensions) used in
+        polynomial fitting.
+    minimum_dof : `int`
+        Minimum number of degree of freedom to do the fit.
+    """
+
+    def __init__(
+        self,
+        num_good_stars,
+        minimum_dof,
+        poly_ndim,
+    ):
+        self._num_good_stars = num_good_stars
+        self._poly_ndim = poly_ndim
+        self._minimum_dof = minimum_dof
+        super().__init__(
+            f"Failed to determine piff psf: too few good stars ({num_good_stars}) and minimum dof to fit "
+            f"a {poly_ndim} order polynomial is {minimum_dof}."
+        )
+
+    @property
+    def metadata(self):
+        return {
+            "num_good_stars": self._num_good_stars,
+            "poly_ndim": self._poly_ndim,
+            "minimum_dof": self._minimum_dof,
+        }
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
@@ -497,27 +535,57 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
             return freeParameters
 
-        if self.config.zerothOrderInterpNotEnoughStars:
-            if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
-                threshold = _get_threshold(piffConfig['interp']['order'])
-                if len(stars) < threshold:
+        if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
+            threshold = _get_threshold(piffConfig['interp']['order'])
+            if len(stars) < threshold:
+                if self.config.zerothOrderInterpNotEnoughStars:
                     self.log.warning(
-                        f"Only {len(stars)} stars found, "
-                        f"but {threshold} required. Using zeroth order interpolation."
+                        "Only %d stars found, "
+                        "but %d required. Using zeroth order interpolation."%((len(stars), threshold))
                     )
                     piffConfig['interp']['order'] = 0
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
+                else:
+                    raise PiffTooFewGoodStarsError(
+                        num_good_stars=len(stars),
+                        minimum_dof=threshold,
+                        poly_ndim=piffConfig['interp']['order'],
+                    )
 
         self._piffConfig = piffConfig
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
 
         piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
+
+        nUsedStars = len([s for s in piffResult.stars if not s.is_flagged and not s.is_reserve])
+
+        if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
+            threshold = _get_threshold(piffConfig['interp']['order'])
+            if nUsedStars < threshold:
+                if self.config.zerothOrderInterpNotEnoughStars:
+                    self.log.warning(
+                        "Only %d after outlier rejection, "
+                        "but %d required. Using zeroth order interpolation."%((nUsedStars, threshold))
+                    )
+                    piffConfig['interp']['order'] = 0
+                    # No need to do any outlier rejection assume
+                    # PSF to be average of few stars.
+                    piffConfig['max_iter'] = 1
+                    piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
+                    nUsedStars = len(stars)
+                else:
+                    raise PiffTooFewGoodStarsError(
+                        num_good_stars=nUsedStars,
+                        minimum_dof=threshold,
+                        poly_ndim=piffConfig['interp']['order'],
+                    )
+
         drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
 
-        used_image_pos = [s.image_pos for s in piffResult.stars]
+        used_image_pos = [s.image_pos for s in piffResult.stars if not s.is_flagged and not s.is_reserve]
         if flagKey:
             for candidate in psfCandidateList:
                 source = candidate.getSource()
@@ -528,7 +596,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         if metadata is not None:
             metadata["spatialFitChi2"] = piffResult.chisq
             metadata["numAvailStars"] = len(stars)
-            metadata["numGoodStars"] = len(piffResult.stars)
+            metadata["numGoodStars"] = nUsedStars
             metadata["avgX"] = np.mean([p.x for p in piffResult.stars])
             metadata["avgY"] = np.mean([p.y for p in piffResult.stars])
 
