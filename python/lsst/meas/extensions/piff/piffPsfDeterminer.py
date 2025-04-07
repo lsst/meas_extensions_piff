@@ -36,8 +36,6 @@ from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from lsst.pipe.base import AlgorithmError
 from .piffPsf import PiffPsf
 from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
-from smatch.matcher import Matcher
-import astropy.units as u
 
 
 def _validateGalsimInterpolant(name: str) -> bool:
@@ -430,48 +428,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
-    def _addStarsColors(self, stars, exposure, fgcmCat):
-
-        gswcs = CelestialWcsWrapper(exposure.getWcs())
-        xPiff = np.array([star.x for star in stars])
-        yPiff = np.array([star.y for star in stars])
-        raPiff, decPiff = gswcs.xyToradec(xPiff, yPiff, units="degree")
-        raPiff = (raPiff * u.radian).to(u.degree).value
-        decPiff = (decPiff * u.radian).to(u.degree).value
-
-        with Matcher(raPiff, decPiff) as matcher:
-            idx, idxStarCat, idxColorCat, d = matcher.query_radius(
-                (fgcmCat["ra"] * u.radian).to(u.degree).value,
-                (fgcmCat["dec"] * u.radian).to(u.degree).value,
-                1. / 3600.0,
-                return_indices=True,
-            )
-
-        magStr1 = self.config.color[0]
-        magStr2 = self.config.color[1]
-        colors = fgcmCat[f'mag_{magStr1}'] - fgcmCat[f'mag_{magStr2}']
-        colors = colors[idxColorCat]
-
-        # set to mean color when no data available.
-        isColor = np.isfinite(colors)
-        meanColor = np.mean(colors[isColor])
-        colors[~isColor] = meanColor
-
-        newstars = []
-        for idx, color in zip(idxStarCat, colors):
-            star = stars[idx]
-            star.data.properties['color'] = color
-            newstars.append(star)
-
-        # TO DO: it looks like there are some stars with no match.
-        # TO DO: need to check what is going on because expect 300.
-        # TO DO: stars but does not looks to be the case.
-
-        return newstars
-
 
     def determinePsf(
-        self, exposure, psfCandidateList, metadata=None, flagKey=None, fgcmCat=None,
+        self, exposure, psfCandidateList, metadata=None, flagKey=None,
     ):
         """Determine a Piff PSF model for an exposure given a list of PSF
         candidates.
@@ -496,9 +455,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
            Unused by this PsfDeterminer.
         """
         psfCandidateList = self.downsampleCandidates(psfCandidateList)
-
-        if fgcmCat is not None:
-            print("PFFFFFFFFF: J AI FGCM")
 
         if self.config.stampSize:
             stampSize = self.config.stampSize
@@ -566,6 +522,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             )
             star = piff.Star(data, None)
             star.data.properties['starId'] = starId
+            star.data.properties['color'] = candidate.getPsfColor()
             stars.append(star)
 
         # The following is mostly accommodating unittests that don't have
@@ -578,7 +535,16 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         orders = [spatialOrder] * len(keys)
 
         if self.config.useColor:
-            stars = self._addStarsColors(stars, exposure, fgcmCat)
+            colors = [s.data.properties['color'] for s in stars
+                      if np.isfinite(s.data.properties['color'])]
+            if len(colors) == 0:
+                self.log.warning("No color informations for PSF candidates, Set PSF colors to 0s.")
+                meanColors = 0.
+            else:
+                meanColors = np.mean(colors)
+            for s in stars:
+                if not np.isfinite(s.data.properties['color']):
+                    s.data.properties['color'] = meanColors
             keys.append('color')
             orders.append(self.config.colorOrder)
 
