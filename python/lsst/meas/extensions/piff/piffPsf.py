@@ -114,7 +114,8 @@ class PiffPsf(ImagePsf):
     def getAverageColor(self):
         if self._averageColor is None:
             if 'color' in self._piffResult.interp_property_names:
-                c = np.mean([star.data.properties['color'] for star in self._piffResult.stars])
+                c = np.mean([s.data.properties['color'] for s in self._piffResult.stars
+                             if not s.is_flagged and not s.is_reserve])
                 self._averageColor = Color(c)
             else:
                 self._averageColor = Color() # set value to nan.
