@@ -93,10 +93,6 @@ class PiffPsf(ImagePsf):
         return self._doImage(position, center=None, color=color)
 
     def _doComputeKernelImage(self, position, color):
-        print(f"PFFFFFF HERE IS COLOR: {color}")
-        print(f"PFFFFFF HERE IS COLOR: {color.isIndeterminate()}")
-        print(f"PFFFFFF HERE IS COLOR: {color.getColorValue()}")
-        print()
         return self._doImage(position, center=True, color=color)
 
     def _doComputeBBox(self, position, color):
@@ -129,10 +125,11 @@ class PiffPsf(ImagePsf):
         # True => draw in center of image
         if 'color' in self._piffResult.interp_property_names:
             if color is None or color.isIndeterminate():
+                meanColor = np.nan
                 if self._averageColor is None:
-                    meanColor = self.getAverageColor()
+                    meanColor = self.getAverageColor().getColorValue()
                 else:
-                    meanColor = self._averageColor
+                    meanColor = self._averageColor.getColorValue()
                 kwargs = {'color': meanColor}
                 self.log.warning("PSF model need a color information. Set to mean Color from PSF fit right now.")
             else:
