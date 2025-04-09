@@ -428,7 +428,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
-
     def determinePsf(
         self, exposure, psfCandidateList, metadata=None, flagKey=None,
     ):
@@ -575,9 +574,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
         def _get_threshold(nth_order):
-            if type(nth_order) == list:
+            if isinstance(nth_order, list):
+                # right now, nth_order[0] and nth_order[1] are the same.
                 freeParameters = ((nth_order[0] + 1) * (nth_order[0] + 2)) // 2
-                if len(nth_order) == 3: # when color correction
+                if len(nth_order) == 3:  # when color correction
                     freeParameters += nth_order[2]
             else:
                 # number of free parameter in the polynomial interpolation
@@ -606,14 +606,6 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self._piffConfig = piffConfig
         piffResult = piff.PSF.process(piffConfig)
         wcs = {0: gswcs}
-
-        #import pickle
-        #dic = {'stars': stars,
-        #       'wcs': wcs,
-        #       'pointing': pointing,}
-        #starpkl = open(f'/sdf/home/l/leget/rubin-user/lsst_dev/tickets/DM-45569_add_color_psf/star_{self.config.useCoordinates}.pkl', 'wb')
-        #pickle.dump(dic, starpkl)
-        #starpkl.close()
 
         piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
 

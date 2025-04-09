@@ -114,7 +114,7 @@ class PiffPsf(ImagePsf):
                              if not s.is_flagged and not s.is_reserve])
                 self._averageColor = Color(c)
             else:
-                self._averageColor = Color() # set value to nan.
+                self._averageColor = Color()  # set value to nan.
         return self._averageColor
 
     # Internal private methods
@@ -131,7 +131,8 @@ class PiffPsf(ImagePsf):
                 else:
                     meanColor = self._averageColor.getColorValue()
                 kwargs = {'color': meanColor}
-                self.log.warning("PSF model need a color information. Set to mean Color from PSF fit right now.")
+                self.log.warning("PSF model need a color information."
+                                 "Set to mean Color from PSF fit right now.")
             else:
                 kwargs = {'color': color.getColorValue()}
         else:
