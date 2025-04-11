@@ -59,16 +59,19 @@ def _validateGalsimInterpolant(name: str) -> bool:
         Whether the provided interpolant name is valid.
     """
     # First, check if ``name`` is a valid Lanczos interpolant.
-    for pattern in (re.compile(r"Lanczos\(\d+\)"), re.compile(r"galsim.Lanczos\(\d+\)"),):
+    for pattern in (
+        re.compile(r"Lanczos\(\d+\)"),
+        re.compile(r"galsim.Lanczos\(\d+\)"),
+    ):
         match = re.match(pattern, name)  # Search from the start of the string.
         if match is not None:
             # Check that the pattern is also the end of the string.
             return match.end() == len(name)
 
     # If not, check if ``name`` is any other valid GalSim interpolant.
-    names = {f"galsim.{interp}" for interp in
-             ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
-             }
+    names = {
+        f"galsim.{interp}" for interp in ("Cubic", "Delta", "Linear", "Nearest", "Quintic", "SincInterpolant")
+    }
     return name in names
 
 
@@ -111,8 +114,7 @@ class PiffTooFewGoodStarsError(AlgorithmError):
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     spatialOrderPerBand = pexConfig.DictField(
-        doc="Per-band spatial order for PSF kernel creation. "
-        "Ignored if piffPsfConfigYaml is set.",
+        doc="Per-band spatial order for PSF kernel creation. Ignored if piffPsfConfigYaml is set.",
         keytype=str,
         itemtype=int,
         default={},
@@ -140,7 +142,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         "Will use provided centroid if set to False. Default in Piff "
         "is set to True. Depends on how input centroids can be trust. "
         "Ignore if piffPsfConfigYaml is not None.",
-        default=True
+        default=True,
     )
     samplingSize = pexConfig.Field[float](
         doc="Resolution of the internal PSF model relative to the pixel size; "
@@ -154,64 +156,57 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default=25,
     )
     outlierNSigma = pexConfig.Field[float](
-        doc="n sigma for chisq outlier rejection. "
-        "Ignored if piffPsfConfigYaml is set.",
-        default=4.0
+        doc="n sigma for chisq outlier rejection. Ignored if piffPsfConfigYaml is set.", default=4.0
     )
     outlierMaxRemove = pexConfig.Field[float](
         doc="Max fraction of stars to remove as outliers each iteration. "
         "Ignored if piffPsfConfigYaml is set.",
-        default=0.05
+        default=0.05,
     )
     maxSNR = pexConfig.Field[float](
-        doc="Rescale the weight of bright stars such that their SNR is less "
-            "than this value.",
-        default=200.0
+        doc="Rescale the weight of bright stars such that their SNR is less than this value.", default=200.0
     )
     zeroWeightMaskBits = pexConfig.ListField[str](
         doc="List of mask bits for which to set pixel weights to zero.",
-        default=['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
+        default=["BAD", "CR", "INTRP", "SAT", "SUSPECT", "NO_DATA"],
     )
     minimumUnmaskedFraction = pexConfig.Field[float](
-        doc="Minimum fraction of unmasked pixels required to use star.",
-        default=0.5
+        doc="Minimum fraction of unmasked pixels required to use star.", default=0.5
     )
     interpolant = pexConfig.Field[str](
         doc="GalSim interpolant name for Piff to use. "
-            "Options include 'Lanczos(N)', where N is an integer, along with "
-            "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
-            "galsim.Quintic, and galsim.SincInterpolant. Ignored if "
-            "piffPsfConfigYaml is set.",
+        "Options include 'Lanczos(N)', where N is an integer, along with "
+        "galsim.Cubic, galsim.Delta, galsim.Linear, galsim.Nearest, "
+        "galsim.Quintic, and galsim.SincInterpolant. Ignored if "
+        "piffPsfConfigYaml is set.",
         check=_validateGalsimInterpolant,
         default="Lanczos(11)",
     )
     zerothOrderInterpNotEnoughStars = pexConfig.Field[bool](
-        doc="If True, use zeroth order interpolation if not enough stars are found.",
-        default=False
+        doc="If True, use zeroth order interpolation if not enough stars are found.", default=False
     )
     debugStarData = pexConfig.Field[bool](
-        doc="Include star images used for fitting in PSF model object.",
-        default=False
+        doc="Include star images used for fitting in PSF model object.", default=False
     )
     useCoordinates = pexConfig.ChoiceField[str](
         doc="Which spatial coordinates to regress against in PSF modeling.",
         allowed=dict(
-            pixel='Regress against pixel coordinates',
-            field='Regress against field angles',
-            sky='Regress against RA/Dec'
+            pixel="Regress against pixel coordinates",
+            field="Regress against field angles",
+            sky="Regress against RA/Dec",
         ),
-        default='pixel'
+        default="pixel",
     )
     piffMaxIter = pexConfig.Field[int](
         doc="Maximum iteration while doing outlier rejection."
         "Might be overwrite if zerothOrderInterpNotEnoughStars is True and "
         "ignore if piffPsfConfigYaml is not None.",
-        default=15
+        default=15,
     )
     piffLoggingLevel = pexConfig.RangeField[int](
         doc="PIFF-specific logging level, from 0 (least chatty) to 3 (very verbose); "
-            "note that logs will come out with unrelated notations (e.g. WARNING does "
-            "not imply a warning.)",
+        "note that logs will come out with unrelated notations (e.g. WARNING does "
+        "not imply a warning.)",
         default=0,
         min=0,
         max=3,
@@ -235,7 +230,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         self.stampSize = 25
         # Resize the stamp to accommodate the model, but only if necessary.
         if self.useCoordinates == "sky":
-            self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
+            self.stampSize = max(25, 2 * int(0.5 * self.modelSize * np.sqrt(2) / self.samplingSize) + 1)
 
     def validate(self):
         super().validate()
@@ -243,15 +238,16 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         if (stamp_size := self.stampSize) is not None:
             model_size = self.modelSize
             sampling_size = self.samplingSize
-            if self.useCoordinates == 'sky':
+            if self.useCoordinates == "sky":
                 min_stamp_size = int(np.sqrt(2) * model_size / sampling_size)
             else:
                 min_stamp_size = int(model_size / sampling_size)
 
             if stamp_size < min_stamp_size:
-                msg = (f"PIFF model size of {model_size} is too large for stamp size {stamp_size}. "
-                       f"Set stampSize >= {min_stamp_size}"
-                       )
+                msg = (
+                    f"PIFF model size of {model_size} is too large for stamp size {stamp_size}. "
+                    f"Set stampSize >= {min_stamp_size}"
+                )
                 raise pexConfig.FieldValidationError(self.__class__.modelSize, self, msg)
 
 
@@ -314,7 +310,7 @@ def computeWeight(maskedImage, maxSNR, good):
     fit = np.polyfit(imArr[good], varArr[good], deg=1)
     # fit is [1/gain, sky_var]
     weightArr = np.zeros_like(imArr, dtype=float)
-    weightArr[good] = 1./fit[1]
+    weightArr[good] = 1.0 / fit[1]
 
     applyMaxSNR(imArr, weightArr, good, maxSNR)
     return weightArr
@@ -359,12 +355,12 @@ def applyMaxSNR(imArr, weightArr, good, maxSNR):
     #
     # F = Sum_i w_i I_i^2
     # S/N = (F-Npix) / sqrt(F)
-    F = np.sum(weightArr[good]*imArr[good]**2, dtype=float)
+    F = np.sum(weightArr[good] * imArr[good] ** 2, dtype=float)
     Npix = np.sum(good)
-    SNR = 0.0 if F < Npix else (F-Npix)/np.sqrt(F)
+    SNR = 0.0 if F < Npix else (F - Npix) / np.sqrt(F)
     # rescale weight of bright stars.  Essentially makes an error floor.
     if SNR > maxSNR:
-        factor = (maxSNR / SNR)**2
+        factor = (maxSNR / SNR) ** 2
         weightArr[good] *= factor
 
 
@@ -382,18 +378,18 @@ def _computeWeightAlternative(maskedImage, maxSNR):
 
     fit = np.polyfit(imArr[good], varArr[good], deg=1)
     # fit is [1/gain, sky_var]
-    gain = 1./fit[0]
+    gain = 1.0 / fit[0]
     varArr[good] -= imArr[good] / gain
     weightArr = np.zeros_like(imArr, dtype=float)
-    weightArr[good] = 1./varArr[good]
+    weightArr[good] = 1.0 / varArr[good]
 
     applyMaxSNR(imArr, weightArr, good, maxSNR)
     return weightArr
 
 
 class PiffPsfDeterminerTask(BasePsfDeterminerTask):
-    """A measurePsfTask PSF estimator using Piff as the implementation.
-    """
+    """A measurePsfTask PSF estimator using Piff as the implementation."""
+
     ConfigClass = PiffPsfDeterminerConfig
     _DefaultName = "psfDeterminer.Piff"
 
@@ -409,9 +405,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
-    def determinePsf(
-        self, exposure, psfCandidateList, metadata=None, flagKey=None
-    ):
+    def determinePsf(self, exposure, psfCandidateList, metadata=None, flagKey=None):
         """Determine a Piff PSF model for an exposure given a list of PSF
         candidates.
 
@@ -448,23 +442,20 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         scale = exposure.getWcs().getPixelScale(exposure.getBBox().getCenter()).asArcseconds()
 
         match self.config.useCoordinates:
-            case 'field':
+            case "field":
                 detector = exposure.getDetector()
                 pix_to_field = detector.getTransform(PIXELS, FIELD_ANGLE)
                 gswcs = UVWcsWrapper(pix_to_field)
                 pointing = None
 
-            case 'sky':
+            case "sky":
                 gswcs = CelestialWcsWrapper(exposure.getWcs())
                 skyOrigin = exposure.getWcs().getSkyOrigin()
                 ra = skyOrigin.getLongitude().asDegrees()
                 dec = skyOrigin.getLatitude().asDegrees()
-                pointing = galsim.CelestialCoord(
-                    ra*galsim.degrees,
-                    dec*galsim.degrees
-                )
+                pointing = galsim.CelestialCoord(ra * galsim.degrees, dec * galsim.degrees)
 
-            case 'pixel':
+            case "pixel":
                 gswcs = galsim.PixelScale(scale)
                 pointing = None
 
@@ -472,16 +463,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         for candidate in psfCandidateList:
             cmi = candidate.getMaskedImage(stampSize, stampSize)
             good = getGoodPixels(cmi, self.config.zeroWeightMaskBits)
-            fracGood = np.sum(good)/good.size
+            fracGood = np.sum(good) / good.size
             if fracGood < self.config.minimumUnmaskedFraction:
                 continue
             weight = computeWeight(cmi, self.config.maxSNR, good)
 
             bbox = cmi.getBBox()
-            bds = galsim.BoundsI(
-                galsim.PositionI(*bbox.getMin()),
-                galsim.PositionI(*bbox.getMax())
-            )
+            bds = galsim.BoundsI(galsim.PositionI(*bbox.getMin()), galsim.PositionI(*bbox.getMax()))
             gsImage = galsim.Image(bds, wcs=gswcs, dtype=float)
             gsImage.array[:] = cmi.image.array
             gsWeight = galsim.Image(bds, wcs=gswcs, dtype=float)
@@ -491,14 +479,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             starId = source.getId()
             image_pos = galsim.PositionD(source.getX(), source.getY())
 
-            data = piff.StarData(
-                gsImage,
-                image_pos,
-                weight=gsWeight,
-                pointing=pointing
-            )
+            data = piff.StarData(gsImage, image_pos, weight=gsWeight, pointing=pointing)
             star = piff.Star(data, None)
-            star.data.properties['starId'] = starId
+            star.data.properties["starId"] = starId
             stars.append(star)
 
         if self.config.piffPsfConfigYaml is None:
@@ -510,25 +493,25 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 band = None
             spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
             piffConfig = {
-                'type': 'Simple',
-                'model': {
-                    'type': 'PixelGrid',
-                    'scale': scale * self.config.samplingSize,
-                    'size': self.config.modelSize,
-                    'interp': self.config.interpolant,
-                    'centered': self.config.piffPixelGridFitCenter,
+                "type": "LSSTSimple",
+                "model": {
+                    "type": "LSSTPixelGrid",
+                    "scale": scale * self.config.samplingSize,
+                    "size": self.config.modelSize,
+                    "interp": self.config.interpolant,
+                    "centered": self.config.piffPixelGridFitCenter,
                 },
-                'interp': {
-                    'type': 'BasisPolynomial',
-                    'order': spatialOrder,
-                    'solver': self.config.piffBasisPolynomialSolver,
+                "interp": {
+                    "type": "LSSTBasisPolynomial",
+                    "order": spatialOrder,
+                    "solver": self.config.piffBasisPolynomialSolver,
                 },
-                'outliers': {
-                    'type': 'Chisq',
-                    'nsigma': self.config.outlierNSigma,
-                    'max_remove': self.config.outlierMaxRemove,
+                "outliers": {
+                    "type": "Chisq",
+                    "nsigma": self.config.outlierNSigma,
+                    "max_remove": self.config.outlierMaxRemove,
                 },
-                'max_iter': self.config.piffMaxIter
+                "max_iter": self.config.piffMaxIter,
             }
         else:
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
@@ -538,23 +521,23 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
             return freeParameters
 
-        if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
-            threshold = _get_threshold(piffConfig['interp']['order'])
+        if piffConfig["interp"]["type"] in ["BasisPolynomial", "Polynomial", "LSSTBasisPolynomial"]:
+            threshold = _get_threshold(piffConfig["interp"]["order"])
             if len(stars) < threshold:
                 if self.config.zerothOrderInterpNotEnoughStars:
                     self.log.warning(
                         "Only %d stars found, "
-                        "but %d required. Using zeroth order interpolation."%((len(stars), threshold))
+                        "but %d required. Using zeroth order interpolation." % ((len(stars), threshold))
                     )
-                    piffConfig['interp']['order'] = 0
+                    piffConfig["interp"]["order"] = 0
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
-                    piffConfig['max_iter'] = 1
+                    piffConfig["max_iter"] = 1
                 else:
                     raise PiffTooFewGoodStarsError(
                         num_good_stars=len(stars),
                         minimum_dof=threshold,
-                        poly_ndim=piffConfig['interp']['order'],
+                        poly_ndim=piffConfig["interp"]["order"],
                     )
 
         self._piffConfig = piffConfig
@@ -565,31 +548,32 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
         nUsedStars = len([s for s in piffResult.stars if not s.is_flagged and not s.is_reserve])
 
-        if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
-            threshold = _get_threshold(piffConfig['interp']['order'])
+        if piffConfig["interp"]["type"] in ["BasisPolynomial", "Polynomial", "LSSTBasisPolynomial"]:
+            threshold = _get_threshold(piffConfig["interp"]["order"])
             if nUsedStars < threshold:
                 if self.config.zerothOrderInterpNotEnoughStars:
                     self.log.warning(
                         "Only %d after outlier rejection, "
-                        "but %d required. Using zeroth order interpolation."%((nUsedStars, threshold))
+                        "but %d required. Using zeroth order interpolation." % ((nUsedStars, threshold))
                     )
-                    piffConfig['interp']['order'] = 0
+                    piffConfig["interp"]["order"] = 0
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
-                    piffConfig['max_iter'] = 1
+                    piffConfig["max_iter"] = 1
                     piffResult.fit(stars, wcs, pointing, logger=self.piffLogger)
                     nUsedStars = len(stars)
                 else:
                     raise PiffTooFewGoodStarsError(
                         num_good_stars=nUsedStars,
                         minimum_dof=threshold,
-                        poly_ndim=piffConfig['interp']['order'],
+                        poly_ndim=piffConfig["interp"]["order"],
                     )
 
-        drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
+        drawSize = 2 * np.floor(0.5 * stampSize / self.config.samplingSize) + 1
 
-        used_image_starId = {s.data.properties['starId'] for s in piffResult.stars
-                             if not s.is_flagged and not s.is_reserve}
+        used_image_starId = {
+            s.data.properties["starId"] for s in piffResult.stars if not s.is_flagged and not s.is_reserve
+        }
 
         assert len(used_image_starId) == nUsedStars, "Star IDs are not unique"
 
@@ -604,10 +588,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["spatialFitChi2"] = piffResult.chisq
             metadata["numAvailStars"] = len(stars)
             metadata["numGoodStars"] = nUsedStars
-            metadata["avgX"] = np.mean([s.x for s in piffResult.stars
-                                        if not s.is_flagged and not s.is_reserve])
-            metadata["avgY"] = np.mean([s.y for s in piffResult.stars
-                                        if not s.is_flagged and not s.is_reserve])
+            metadata["avgX"] = np.mean(
+                [s.x for s in piffResult.stars if not s.is_flagged and not s.is_reserve]
+            )
+            metadata["avgY"] = np.mean(
+                [s.y for s in piffResult.stars if not s.is_flagged and not s.is_reserve]
+            )
 
         if not self.config.debugStarData:
             for star in piffResult.stars:
