@@ -42,6 +42,11 @@ class PiffPsf(ImagePsf):
         self.dimensions = Extent2I(width, height)
         self._piffResult = piffResult
         self._averagePosition = None
+        if self._piffResult.model._type_name == "LSSTPixelGrid":
+            position = self.getAveragePosition()
+            prof, _ = self._piffResult.get_profile(position.x, position.y)
+            maxK = prof._maxk
+            self._piffResult.model.setMaxK(maxK)
 
     @property
     def piffResult(self):
