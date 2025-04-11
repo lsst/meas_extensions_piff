@@ -32,10 +32,7 @@ from lsst.geom import Box2I, Point2I, Extent2I, Point2D
 
 
 class PiffPsf(ImagePsf):
-    _factory = StorableHelperFactory(
-        "lsst.meas.extensions.piff.piffPsf",
-        "PiffPsf"
-    )
+    _factory = StorableHelperFactory("lsst.meas.extensions.piff.piffPsf", "PiffPsf")
 
     def __init__(self, width, height, piffResult):
         assert width == height
@@ -97,10 +94,12 @@ class PiffPsf(ImagePsf):
 
     def getAveragePosition(self):
         if self._averagePosition is None:
-            x = np.mean([s.image_pos.x for s in self._piffResult.stars
-                         if not s.is_flagged and not s.is_reserve])
-            y = np.mean([s.image_pos.y for s in self._piffResult.stars
-                         if not s.is_flagged and not s.is_reserve])
+            x = np.mean(
+                [s.image_pos.x for s in self._piffResult.stars if not s.is_flagged and not s.is_reserve]
+            )
+            y = np.mean(
+                [s.image_pos.y for s in self._piffResult.stars if not s.is_flagged and not s.is_reserve]
+            )
             self._averagePosition = Point2D(x, y)
         return self._averagePosition
 
@@ -110,9 +109,7 @@ class PiffPsf(ImagePsf):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
-        gsimg = self._piffResult.draw(
-            position.x, position.y, stamp_size=self.width, center=center
-        )
+        gsimg = self._piffResult.draw(position.x, position.y, stamp_size=self.width, center=center)
         bbox = self._doBBox(position, center)
         img = Image(bbox, dtype=np.float64)
         img.array[:] = gsimg.array
@@ -120,7 +117,7 @@ class PiffPsf(ImagePsf):
         return img
 
     def _doBBox(self, position, center):
-        origin = -(self.dimensions//2)
+        origin = -(self.dimensions // 2)
         if center is None:
             origin = Point2I(position) + origin
         return Box2I(Point2I(origin), self.dimensions)
