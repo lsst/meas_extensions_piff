@@ -354,7 +354,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         ).psfCandidates
 
         for psf in psfCandidateList:
-            psf.setPsfColor(0.42)
+            psf.setPsfColorValue(0.42)
+            psf.setPsfColorType("g-r")
 
         logger = logging.getLogger("lsst.psfDeterminer.Piff")
 

@@ -48,8 +48,8 @@ class PiffPsf(ImagePsf):
         self._averagePosition = None
         self._averageColor = None
         try:
-            color_type = [ s.data.properties['colorType'] for s in self._piffResult.stars
-                          if not s.is_flagged and not s.is_reserve ]
+            color_type = [s.data.properties['colorType'] for s in self._piffResult.stars
+                          if not s.is_flagged and not s.is_reserve]
             color_type = list(set(color_type))
             self._color_type = color_type[0]
         except Exception:
