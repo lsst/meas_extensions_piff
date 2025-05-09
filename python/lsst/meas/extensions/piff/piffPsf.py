@@ -47,6 +47,14 @@ class PiffPsf(ImagePsf):
         self._piffResult = piffResult
         self._averagePosition = None
         self._averageColor = None
+        try:
+            color_type = [ s.data.properties['colorType'] for s in self._piffResult.stars
+                          if not s.is_flagged and not s.is_reserve ]
+            color_type = list(set(color_type))
+            self._color_type = color_type[0]
+        except Exception:
+            self._color_type = None
+
         self.log = log or logging.getLogger(__name__)
 
     @property
@@ -109,10 +117,10 @@ class PiffPsf(ImagePsf):
 
     def getAverageColor(self):
         if self._averageColor is None:
-            if 'color' in self._piffResult.interp_property_names:
-                c = np.mean([s.data.properties['color'] for s in self._piffResult.stars
+            if 'colorValue' in self._piffResult.interp_property_names:
+                c = np.mean([s.data.properties['colorValue'] for s in self._piffResult.stars
                              if not s.is_flagged and not s.is_reserve])
-                self._averageColor = Color(colorValue=c, colorType="g-r")
+                self._averageColor = Color(colorValue=c, colorType=self._color_type)
             else:
                 self._averageColor = Color()  # set value to nan.
         return self._averageColor
@@ -123,18 +131,21 @@ class PiffPsf(ImagePsf):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
-        if 'color' in self._piffResult.interp_property_names:
+        if 'colorValue' in self._piffResult.interp_property_names:
             if color is None or color.isIndeterminate():
                 meanColor = np.nan
                 if self._averageColor is None:
                     meanColor = self.getAverageColor().getColorValue()
                 else:
                     meanColor = self._averageColor.getColorValue()
-                kwargs = {'color': meanColor}
+                kwargs = {'colorValue': meanColor}
                 self.log.warning("PSF model need a color information."
                                  "Set to mean Color from PSF fit right now.")
             else:
-                kwargs = {'color': color.getColorValue()}
+                ctype = color.getColorType()
+                if self._color_type != color.getColorType():
+                    raise ValueError(f"Invalid Color type. Need {self._color_type} but {ctype} is provided")
+                kwargs = {'colorValue': color.getColorValue()}
         else:
             kwargs = {}
         gsimg = self._piffResult.draw(

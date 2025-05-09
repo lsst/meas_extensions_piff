@@ -521,7 +521,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             )
             star = piff.Star(data, None)
             star.data.properties['starId'] = starId
-            star.data.properties['color'] = candidate.getPsfColor()
+            star.data.properties['colorValue'] = candidate.getPsfColorValue()
+            star.data.properties['colorType'] = candidate.getPsfColorType()
             stars.append(star)
 
         # The following is mostly accommodating unittests that don't have
@@ -534,17 +535,17 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         orders = [spatialOrder] * len(keys)
 
         if self.config.useColor:
-            colors = [s.data.properties['color'] for s in stars
-                      if np.isfinite(s.data.properties['color'])]
+            colors = [s.data.properties['colorValue'] for s in stars
+                      if np.isfinite(s.data.properties['colorValue'])]
             if len(colors) == 0:
                 self.log.warning("No color informations for PSF candidates, Set PSF colors to 0s.")
                 meanColors = 0.
             else:
                 meanColors = np.mean(colors)
             for s in stars:
-                if not np.isfinite(s.data.properties['color']):
-                    s.data.properties['color'] = meanColors
-            keys.append('color')
+                if not np.isfinite(s.data.properties['colorValue']):
+                    s.data.properties['colorValue'] = meanColors
+            keys.append('colorValue')
             orders.append(self.config.colorOrder)
 
         if self.config.piffPsfConfigYaml is None:
