@@ -240,6 +240,18 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default=None,
         optional=True,
     )
+    writeTrainingSet = pexConfig.Field[bool](
+        doc="write training set for a learned PSF model.",
+        default=False,
+    )
+    trainingSetLocation = pexConfig.Field[str](
+        doc="Where to write training set for a learned PSF model.",
+        default="",
+    )
+    cameraModelTrainingSet = pexConfig.Field[str](
+        doc="which camera is used for the learned PSF model.",
+        default="LSSTComCam",
+    )
 
     def setDefaults(self):
         super().setDefaults()
@@ -651,6 +663,89 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 starId = source.getId()
                 if starId in used_image_starId:
                     source.set(flagKey, True)
+
+        if self.config.writeTrainingSet:
+
+            dic = {}
+
+            import lsst.afw.cameraGeom as cameraGeom
+            from lsst.obs.lsst import LsstComCam, LsstCam
+            from lsst.geom import Point2D
+            import pickle
+            import os
+
+            if self.config.cameraModelTrainingSet not in ["LSSTComCam", "LSSTCam"]:
+                raise ValueError('work only for LSST cameras')
+            if self.config.cameraModelTrainingSet == "LSSTComCam":
+                camera = LsstComCam.getCamera()
+            if self.config.cameraModelTrainingSet == "LSSTCam":
+                camera = LsstCam.getCamera()
+
+            def _pixel_to_focal(x, y, det):
+                tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FOCAL_PLANE)
+                fpx, fpy = tx.getMapping().applyForward(np.vstack((x, y)))
+                return fpx.ravel(), fpy.ravel()
+
+            def _get_second_moment(image, guessCentroid, sigma):
+
+                shape = galsim.hsm.FindAdaptiveMom(
+                    image,
+                    weight=None,
+                    badpix=None,  # Already incorporated into `weight_image`.
+                    guess_sig=sigma,
+                    precision=1.0e-6,
+                    guess_centroid=guessCentroid,
+                    strict=True,  # Raises GalSimHSMError if estimation fails.
+                    check=False,  # This speeds up the code!
+                    round_moments=False,
+                    hsmparams=None,
+                )
+                return shape.moments_sigma, shape.observed_shape.e1, shape.observed_shape.e2
+
+            psfModel = PiffPsf(drawSize, drawSize, piffResult)
+
+            detectorId = exposure.getDetector().getId()
+            visitId = exposure.getInfo().getVisitInfo().id
+            bandId = exposure.getInfo().getFilter().bandLabel
+
+            for s in piffResult.stars:
+                if not s.is_flagged and not s.is_reserve:
+                    starId = f"{visitId}_{detectorId}_{bandId}_{s.data.properties['starId']}"
+                    starPiff = piffResult.draw(s.x, s.y, stamp_size=drawSize, center=None)
+                    xFoV, yFoV = _pixel_to_focal(np.array([s.x]), np.array([s.y]), camera[detectorId])
+                    sumStar = np.sum(s.data.image.array)
+
+                    centroid = galsim._PositionD(s.x, s.y)
+                    psfSigma = psfModel.computeShape(Point2D(s.x, s.y)).getTraceRadius()
+                    try:
+                        sigmaStar, e1Star, e2Star = _get_second_moment(s.data.image, centroid, psfSigma)
+                        sigmaPiff, e1Piff, e2Piff = _get_second_moment(starPiff, centroid, psfSigma)
+                    except Exception:
+                        sigmaStar, e1Star, e2Star = -999, -999, -999
+                        sigmaPiff, e1Piff, e2Piff = -999, -999, -999
+
+                    dic[starId] = {"star": s.data.image.array / sumStar,
+                                   "weight": s.data.weight.array * sumStar**2,
+                                   "starPiff": starPiff.array,
+                                   "sigmaStar": sigmaStar,
+                                   "e1Star": e1Star,
+                                   "e2Star": e2Star,
+                                   "sigmaPiff": sigmaPiff,
+                                   "e1Piff": e1Piff,
+                                   "e2Piff": e2Piff,
+                                   "xCCD": s.x,
+                                   "yCCD": s.y,
+                                   "xFoV": xFoV[0],
+                                   "yFoV": yFoV[0],
+                                   "sumStar": sumStar,
+                                   "detector": detectorId,
+                                   "visit": visitId,
+                                   "band": bandId}
+
+            pklName = os.path.join(self.config.trainingSetLocation, f"{visitId}_{detectorId}_{bandId}.pkl")
+            pklFile = open(pklName, 'wb')
+            pickle.dump(dic, pklFile)
+            pklFile.close()
 
         if metadata is not None:
             metadata["spatialFitChi2"] = piffResult.chisq
