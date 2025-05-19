@@ -724,9 +724,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         sigmaStar, e1Star, e2Star = -999, -999, -999
                         sigmaPiff, e1Piff, e2Piff = -999, -999, -999
 
-                    dic[starId] = {"star": s.data.image.array / sumStar,
-                                   "weight": s.data.weight.array * sumStar**2,
-                                   "starPiff": starPiff.array,
+                    starToSave = s.data.image.array / sumStar
+                    starPiffToSave = starPiff.array
+
+                    dic[starId] = {"star": starToSave.astype(np.float32),
+                                   "weight": None, # s.data.weight.array * sumStar**2,
+                                   "starPiff": starPiffToSave.astype(np.float32),
                                    "sigmaStar": sigmaStar,
                                    "e1Star": e1Star,
                                    "e2Star": e2Star,
