@@ -27,8 +27,9 @@ from packaging.version import Version
 import numpy as np
 from lsst.afw.typehandling import StorableHelperFactory
 from lsst.meas.algorithms import ImagePsf
-from lsst.afw.image import Image
+from lsst.afw.image import Image, Color
 from lsst.geom import Box2I, Point2I, Extent2I, Point2D
+import logging
 
 
 class PiffPsf(ImagePsf):
@@ -37,7 +38,7 @@ class PiffPsf(ImagePsf):
         "PiffPsf"
     )
 
-    def __init__(self, width, height, piffResult):
+    def __init__(self, width, height, piffResult, log=None):
         assert width == height
         ImagePsf.__init__(self)
         self.width = width
@@ -45,6 +46,20 @@ class PiffPsf(ImagePsf):
         self.dimensions = Extent2I(width, height)
         self._piffResult = piffResult
         self._averagePosition = None
+        self._averageColor = None
+        self.log = log or logging.getLogger(__name__)
+
+        try:
+            color_type = [s.data.properties['colorType'] for s in self._piffResult.stars
+                          if not s.is_flagged and not s.is_reserve]
+            color_type = list(set(color_type))
+            if len(color_type) > 1:
+                self.log.warning(f"More than one color type was given during training: {color_type}")
+                self._color_type = None
+            else:
+                self._color_type = color_type[0]
+        except Exception:
+            self._color_type = None
 
     @property
     def piffResult(self):
@@ -87,10 +102,10 @@ class PiffPsf(ImagePsf):
         return PiffPsf(width, height, self._piffResult)
 
     def _doComputeImage(self, position, color):
-        return self._doImage(position, center=None)
+        return self._doImage(position, center=None, color=color)
 
     def _doComputeKernelImage(self, position, color):
-        return self._doImage(position, center=True)
+        return self._doImage(position, center=True, color=color)
 
     def _doComputeBBox(self, position, color):
         return self._doBBox(Point2I(0, 0), center=True)
@@ -104,14 +119,41 @@ class PiffPsf(ImagePsf):
             self._averagePosition = Point2D(x, y)
         return self._averagePosition
 
+    def getAverageColor(self):
+        if self._averageColor is None:
+            if 'colorValue' in self._piffResult.interp_property_names:
+                c = np.nanmean([s.data.properties['colorValue'] for s in self._piffResult.stars
+                                if not s.is_flagged and not s.is_reserve])
+                self._averageColor = Color(colorValue=c, colorType=self._color_type)
+            else:
+                self._averageColor = Color()  # set value to nan.
+        return self._averageColor
+
     # Internal private methods
 
-    def _doImage(self, position, center):
+    def _doImage(self, position, center, color=None):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
+        if 'colorValue' in self._piffResult.interp_property_names:
+            if color is None or color.isIndeterminate():
+                meanColor = np.nan
+                if self._averageColor is None:
+                    meanColor = self.getAverageColor().getColorValue()
+                else:
+                    meanColor = self._averageColor.getColorValue()
+                kwargs = {'colorValue': meanColor}
+                self.log.warning("PSF model need a color information."
+                                 "Set to mean Color from PSF fit right now.")
+            else:
+                ctype = color.getColorType()
+                if self._color_type != color.getColorType():
+                    raise ValueError(f"Invalid Color type. Need {self._color_type} but {ctype} is provided")
+                kwargs = {'colorValue': color.getColorValue()}
+        else:
+            kwargs = {}
         gsimg = self._piffResult.draw(
-            position.x, position.y, stamp_size=self.width, center=center
+            position.x, position.y, stamp_size=self.width, center=center, **kwargs,
         )
         bbox = self._doBBox(position, center)
         img = Image(bbox, dtype=np.float64)
