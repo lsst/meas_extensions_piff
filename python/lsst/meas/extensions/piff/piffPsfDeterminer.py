@@ -452,6 +452,28 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+        import pickle
+        visitId = exposure.getInfo().getVisitInfo().getId()
+        detectorId = exposure.getDetector().getId()
+        band = exposure.getInfo().getFilter().bandLabel
+        ampNames = {
+            'C00', 'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07',
+            'C10', 'C11', 'C12', 'C13', 'C14', 'C15', 'C16', 'C17'
+            }
+        dic = {}
+        for ampName in ampNames:
+            dic[ampName] = exposure.getMetadata()[f"LSST ISR AMPOFFSET PEDESTAL {ampName}"]
+        dic["band"] = band
+        fpkl = open(f'/sdf/home/l/leget/rubin-user/lsst_dev/tickets/systemFirstLightPerformanceArticle/PSF/AmpOffsetDataIsr/data/{visitId}_{detectorId}_AmpOffsestISR.pkl', 'wb')
+        pickle.dump(dic, fpkl)
+        fpkl.close()
+
+        raise PiffTooFewGoodStarsError(
+                        num_good_stars=0,
+                        minimum_dof=5,
+                        poly_ndim=42,
+                    )
+
         psfCandidateList = self.downsampleCandidates(psfCandidateList)
 
         if self.config.stampSize:
