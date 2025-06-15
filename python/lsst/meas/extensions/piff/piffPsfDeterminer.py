@@ -670,22 +670,29 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
 
             import lsst.afw.cameraGeom as cameraGeom
             from lsst.obs.lsst import LsstComCam, LsstCam
+            from lsst.obs.subaru import HyperSuprimeCam
             from lsst.geom import Point2D
             import pickle
             import os
 
-            if self.config.cameraModelTrainingSet not in ["LSSTComCam", "LSSTCam"]:
+            if self.config.cameraModelTrainingSet not in ["LSSTComCam", "LSSTCam", "HyperSuprimeCam"]:
                 raise ValueError('work only for LSST cameras')
             if self.config.cameraModelTrainingSet == "LSSTComCam":
                 camera = LsstComCam.getCamera()
             if self.config.cameraModelTrainingSet == "LSSTCam":
                 camera = LsstCam.getCamera()
+            if self.config.cameraModelTrainingSet ==  "HyperSuprimeCam":
+                hsc = HyperSuprimeCam()
+                camera = hsc.getCamera()
 
             def _pixel_to_focal(x, y, det):
                 tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FOCAL_PLANE)
                 fpx, fpy = tx.getMapping().applyForward(np.vstack((x, y)))
-                return fpx.ravel(), fpy.ravel()
-
+                if camera in ["LSSTComCam", "LSSTCam"]:
+                    return fpx.ravel()[0], fpy.ravel()[0]
+                if camera in ["HyperSuprimeCam"]:
+                    return fpx, fpy
+        
             def _get_second_moment(image, guessCentroid, sigma):
 
                 shape = galsim.hsm.FindAdaptiveMom(
@@ -738,8 +745,8 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                                    "e2Piff": e2Piff,
                                    "xCCD": s.x,
                                    "yCCD": s.y,
-                                   "xFoV": xFoV[0],
-                                   "yFoV": yFoV[0],
+                                   "xFoV": xFoV,
+                                   "yFoV": yFoV,
                                    "sumStar": sumStar,
                                    "detector": detectorId,
                                    "visit": visitId,
