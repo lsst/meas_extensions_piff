@@ -688,9 +688,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             def _pixel_to_focal(x, y, det):
                 tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FOCAL_PLANE)
                 fpx, fpy = tx.getMapping().applyForward(np.vstack((x, y)))
-                if camera in ["LSSTComCam", "LSSTCam"]:
+                if self.config.cameraModelTrainingSet in ["LSSTComCam", "LSSTCam"]:
                     return fpx.ravel()[0], fpy.ravel()[0]
-                if camera in ["HyperSuprimeCam"]:
+                if self.config.cameraModelTrainingSet in ["HyperSuprimeCam"]:
                     return fpx, fpy
         
             def _get_second_moment(image, guessCentroid, sigma):
