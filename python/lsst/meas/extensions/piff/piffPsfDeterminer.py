@@ -182,6 +182,11 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
             "Ignored if piffPsfConfigYaml is set.",
         default=False,
     )
+    useSensorHeight = pexConfig.Field[bool](
+        doc="Use Sensor height info measured in lab."
+            "Ignored if piffPsfConfigYaml is set.",
+        default=False,
+    )
     color = pexConfig.DictField(
         doc="The bands to use for calculating color."
         "Ignored if piffPsfConfigYaml is set.",
@@ -533,7 +538,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
         orders = [spatialOrder] * len(keys)
 
-        if self.config.useColor:
+        if self.config.useColor or self.config.useSensorHeight:
             colors = [s.data.properties['colorValue'] for s in stars
                       if np.isfinite(s.data.properties['colorValue'])]
             colorTypes = [s.data.properties['colorType'] for s in stars
@@ -553,6 +558,10 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     s.data.properties['colorType'] = colorType
             keys.append('colorValue')
             orders.append(self.config.colorOrder)
+            if self.config.useSensorHeight:
+                self.log.warning(f"PFFFFFF Mean: {np.mean(colors)}")
+                self.log.warning(f"PFFFFFF Std: {np.std(colors)}")
+                self.log.warning(f"PFFFFFF Type: {set(colorTypes)}")
 
         if self.config.piffPsfConfigYaml is None:
             piffConfig = {

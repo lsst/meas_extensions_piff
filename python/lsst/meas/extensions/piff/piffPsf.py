@@ -136,6 +136,7 @@ class PiffPsf(ImagePsf):
         # None => draw as if star at position
         # True => draw in center of image
         if 'colorValue' in self._piffResult.interp_property_names:
+            self.log.warning("PFFF: Using color or heigh info")
             if color is None or color.isIndeterminate():
                 meanColor = np.nan
                 if self._averageColor is None:
