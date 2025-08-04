@@ -143,8 +143,8 @@ class PiffPsf(ImagePsf):
                 else:
                     meanColor = self._averageColor.getColorValue()
                 kwargs = {'colorValue': meanColor}
-                self.log.warning("PSF model need a color information."
-                                 "Set to mean Color from PSF fit right now.")
+                # PSF model need a color information.
+                # Set to mean color from PSF fit right now.
             else:
                 ctype = color.getColorType()
                 if self._color_type != color.getColorType():
