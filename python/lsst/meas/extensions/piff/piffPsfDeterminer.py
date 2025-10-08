@@ -35,6 +35,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from lsst.pipe.base import AlgorithmError
 from .piffPsf import PiffPsf
+from .goGP import goGPgo
 from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
 
 
@@ -452,6 +453,32 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         psfCellSet : `None`
            Unused by this PsfDeterminer.
         """
+        import os
+        visitId = exposure.getInfo().getVisitInfo().getId()
+        bigPath = "/sdf/home/l/leget/rubin-user/lsst_dev/tickets/systemFirstLightPerformanceArticle/ASTROMETRY/gpThemAll/data/"
+        path = os.path.join(bigPath, f"visits_w33/{visitId}.pkl")
+        if os.path.isfile(path):
+            gp = goGPgo(pklIn=path,
+                        repOut=os.path.join(bigPath,'visits_w33_GP_OUT'),
+                        repPlot=os.path.join(bigPath,'plots_w33'))
+            self.log.info("Do GP")
+            gp.run_gp()
+            self.log.info("Start plot")
+            gp.plotThemAll()
+            self.log.info("Write output")
+            gp.write_output()
+            raise PiffTooFewGoodStarsError(
+                        num_good_stars=42,
+                        minimum_dof=142,
+                        poly_ndim=2026,
+                    )
+        else:
+            raise PiffTooFewGoodStarsError(
+                        num_good_stars=42,
+                        minimum_dof=142,
+                        poly_ndim=2025,
+                    )
+
         psfCandidateList = self.downsampleCandidates(psfCandidateList)
 
         if self.config.stampSize:
