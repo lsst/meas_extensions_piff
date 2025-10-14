@@ -541,12 +541,13 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             if len(colors) == 0:
                 self.log.warning("No color informations for PSF candidates, Set PSF colors to 0s.")
                 meanColors = 0.
+                colorTypes = [stars[0].data.properties['colorType']]
             else:
                 meanColors = np.mean(colors)
-                colorType = list(set(colorTypes))
-                if len(colorType) > 1:
-                    raise ValueError(f"More than one colorType was providen:{colorType}")
-                colorType = colorType[0]
+            colorType = list(set(colorTypes))
+            if len(colorType) > 1:
+                raise ValueError(f"More than one colorType was provided:{colorType}")
+            colorType = colorType[0]
             for s in stars:
                 if not np.isfinite(s.data.properties['colorValue']):
                     s.data.properties['colorValue'] = meanColors
