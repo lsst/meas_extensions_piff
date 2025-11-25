@@ -250,7 +250,7 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         # stampSize should also be at least sqrt(2)*modelSize/samplingSize so
         # that rotated images have support in the model
 
-        self.stampSize = 25
+        self.stampSize = 27
         # Resize the stamp to accommodate the model, but only if necessary.
         if self.useCoordinates == "sky":
             self.stampSize = max(25, 2*int(0.5*self.modelSize*np.sqrt(2)/self.samplingSize) + 1)
