@@ -75,6 +75,10 @@ class PiffPsf(ImagePsf):
                 piffResult.model._num = None
                 piffResult.model._fit_flux = None
                 piffResult.interp._num = None
+        if not hasattr(piffResult.model, "_maxk"):
+            piffResult.model._maxk = 0
+        if not hasattr(piffResult.model, "_stepk"):
+            piffResult.model._stepk = 0
         return PiffPsf(width, height, piffResult)
 
     # ImagePsf overrides
