@@ -350,7 +350,14 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         logger = logging.getLogger("lsst.psfDeterminer.Piff")
 
-        with self.assertLogs("lsst.psfDeterminer.Piff.piff", logging.INFO) as cm:
+        if Version(piff.version) >= Version("1.6"):
+            log_level = logging.INFO
+            log_regex = "INFO:.*:Iteration"
+        else:
+            log_level = logging.WARNING
+            log_regex = "WARNING:.*:Iteration"
+
+        with self.assertLogs("lsst.psfDeterminer.Piff.piff", log_level) as cm:
             if kwargs.get("zerothOrderInterpNotEnoughStars", False):
                 psf, cellSet = self.psfDeterminer.determinePsf(
                     self.exposure,
@@ -369,7 +376,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         # Check that the iterations are being logged.
         logged = "\n".join(cm.output)
-        self.assertRegex(logged, "INFO:.*:Iteration")
+        self.assertRegex(logged, log_regex)
 
         # And check that the levels are set correctly for suppression.
         logger = logging.getLogger("lsst.psfDeterminer.Piff.piff")
