@@ -251,6 +251,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         aipsfModelFile=None,
         writeTrainingSet=False,
         trainingSetLocation=None,
+        maxStarsPerDetector=None,
     ):
         """Setup the starSelector and psfDeterminer
 
@@ -286,6 +287,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             Write a PSF training sample after the fit?
         trainingSetLocation : `str`, optional
             Directory for the training sample pickle files.
+        maxStarsPerDetector : `int`, optional
+            Cap on the number of stars in the training sample.
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -328,6 +331,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         psfDeterminerConfig.writeTrainingSet = writeTrainingSet
         if trainingSetLocation is not None:
             psfDeterminerConfig.trainingSample.trainingSetLocation = trainingSetLocation
+        psfDeterminerConfig.trainingSample.maxStarsPerDetector = maxStarsPerDetector
 
         if piffPsfConfigYaml is None:
             self.useYaml = False
@@ -672,9 +676,16 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                 )
                 self.assertEqual(record["star"].shape, (stampSize, stampSize))
                 self.assertEqual(record["starPiff"].shape, (stampSize, stampSize))
+                self.assertEqual(record["weight"].shape, (stampSize, stampSize))
                 self.assertEqual(record["star"].dtype, np.float32)
                 self.assertEqual(record["starPiff"].dtype, np.float32)
+                self.assertEqual(record["weight"].dtype, np.float32)
                 self.assertFloatsAlmostEqual(record["star"].sum(), 1.0, rtol=1e-5)
+                # The weight map is an inverse variance: finite, non-negative,
+                # and not all zero.
+                self.assertTrue(np.all(np.isfinite(record["weight"])))
+                self.assertTrue(np.all(record["weight"] >= 0))
+                self.assertGreater(np.sum(record["weight"] > 0), 0)
                 self.assertEqual(record["detector"], detector.getId())
                 self.assertEqual(record["visit"], 1234)
                 self.assertEqual(record["band"], "r")
@@ -689,6 +700,35 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.exposure.setPsf(psf)
             image = psf.computeKernelImage(self.exposure.getBBox().getCenter())
             self.assertTrue(np.all(np.isfinite(image.array)))
+
+            # With maxStarsPerDetector set, a random subset of the good stars
+            # is kept.
+            uncappedKeys = set(trainingSample.keys())
+            cap = 3
+            self.assertGreater(len(uncappedKeys), cap)
+            self.setupDeterminer(
+                stampSize=stampSize,
+                writeTrainingSet=True,
+                trainingSetLocation=trainingSetLocation,
+                maxStarsPerDetector=cap,
+            )
+            stars = self.starSelector.run(self.catalog, exposure=self.exposure)
+            psfCandidateList = self.makePsfCandidates.run(
+                stars.sourceCat,
+                exposure=self.exposure
+            ).psfCandidates
+            self.psfDeterminer.determinePsf(
+                self.exposure,
+                psfCandidateList,
+                dafBase.PropertyList(),
+                flagKey=self.usePsfFlag
+            )
+            with open(fileName, "rb") as f:
+                cappedSample = pickle.load(f)
+            self.assertEqual(len(cappedSample), cap)
+            # The capped selection is a subset of the uncapped one (the same
+            # stars are good in both fits).
+            self.assertLessEqual(set(cappedSample.keys()), uncappedKeys)
 
     @unittest.skipUnless(HAVE_AIPSF, "this piff version does not provide AIPSF")
     def testPiffDeterminer_aipsf(self):

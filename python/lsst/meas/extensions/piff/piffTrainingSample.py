@@ -38,6 +38,22 @@ class PiffTrainingSampleConfig(pexConfig.Config):
         "pickle files are written.",
         default=".",
     )
+    maxStarsPerDetector = pexConfig.Field[int](
+        doc="Maximum number of stars to save in the training sample per detector. "
+        "If more good stars are available, a random subset of this size is kept. "
+        "PSFs on a single detector look very similar, so for a fixed total "
+        "training-set size, capping the stars per detector and covering more "
+        "(visit, detector) combinations increases the diversity of the sample. "
+        "None means no cap.",
+        default=None,
+        optional=True,
+    )
+    randomSeed = pexConfig.Field[int](
+        doc="Base seed for the random selection of stars when maxStarsPerDetector "
+        "is set. The effective seed also folds in the visit and detector ids, so "
+        "the selection is reproducible but different on every detector.",
+        default=42,
+    )
 
 
 class PiffTrainingSampleTask(pipeBase.Task):
@@ -45,7 +61,8 @@ class PiffTrainingSampleTask(pipeBase.Task):
 
     This task is meant to be run as a subtask of
     `~lsst.meas.extensions.piff.PiffPsfDeterminerTask` (enabled with its
-    ``writeTrainingSet`` config option).  For each star used in the PSF fit,
+    ``writeTrainingSet`` config option).  For each star used in the PSF fit
+    (optionally capped at a random subset of ``maxStarsPerDetector`` stars),
     it saves the flux-normalized postage stamp together with the fitted PSF
     model prediction at the star position and the star coordinates in both
     pixel and focal-plane coordinates.  The collection is written as one
@@ -60,7 +77,9 @@ class PiffTrainingSampleTask(pipeBase.Task):
 
         {
             "star":     numpy.float32 (N, N), stamp normalized to sum to 1,
-            "weight":   None (reserved for future use),
+            "weight":   numpy.float32 (N, N), inverse variance of the
+                        normalized stamp (the fit weight map rescaled by
+                        sumStar**2); zero for masked pixels,
             "starPiff": numpy.float32 (N, N), fitted PSF model drawn at the
                         star position,
             "xCCD", "yCCD": star position in pixel coordinates,
@@ -106,7 +125,7 @@ class PiffTrainingSampleTask(pipeBase.Task):
         visitId = exposure.getInfo().getVisitInfo().id
         bandId = exposure.getInfo().getFilter().bandLabel
 
-        trainingSample = {}
+        goodStars = []
         for star in piffResult.stars:
             if star.is_flagged or star.is_reserve:
                 continue
@@ -120,13 +139,31 @@ class PiffTrainingSampleTask(pipeBase.Task):
                 )
                 continue
 
+            goodStars.append((star, sumStar))
+
+        maxStars = self.config.maxStarsPerDetector
+        if maxStars is not None and maxStars < len(goodStars):
+            # Fold the visit and detector ids into the seed so the selection is
+            # reproducible but different on every detector.
+            rng = np.random.default_rng([self.config.randomSeed, visitId, detectorId])
+            indices = rng.choice(len(goodStars), size=maxStars, replace=False)
+            goodStars = [goodStars[i] for i in sorted(indices)]
+            self.log.info(
+                "Randomly selected %d of the good stars for the training sample.",
+                maxStars,
+            )
+
+        trainingSample = {}
+        for star, sumStar in goodStars:
             starId = f"{visitId}_{detectorId}_{bandId}_{star.data.properties['starId']}"
             starPiff = piffResult.draw(star.x, star.y, stamp_size=drawSize, center=None)
             focalPoint = pixelsToFocal.applyForward(Point2D(star.x, star.y))
 
             trainingSample[starId] = {
                 "star": (star.data.image.array / sumStar).astype(np.float32),
-                "weight": None,
+                # The saved stamp is image/sumStar, so its inverse variance is
+                # the fit weight map times sumStar**2.
+                "weight": (star.data.weight.array * sumStar**2).astype(np.float32),
                 "starPiff": starPiff.array.astype(np.float32),
                 "xCCD": star.x,
                 "yCCD": star.y,
