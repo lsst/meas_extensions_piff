@@ -88,3 +88,7 @@ Python API reference
 .. automodapi:: lsst.meas.extensions.piff.piffPsfDeterminer
    :no-main-docstr:
    :no-inheritance-diagram:
+
+.. automodapi:: lsst.meas.extensions.piff.piffTrainingSample
+   :no-main-docstr:
+   :no-inheritance-diagram:

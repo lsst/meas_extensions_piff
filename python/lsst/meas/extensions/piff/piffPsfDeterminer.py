@@ -35,6 +35,7 @@ import lsst.meas.algorithms as measAlg
 from lsst.meas.algorithms.psfDeterminer import BasePsfDeterminerTask
 from lsst.pipe.base import AlgorithmError
 from .piffPsf import PiffPsf
+from .piffTrainingSample import PiffTrainingSampleTask
 from .wcs_wrapper import CelestialWcsWrapper, UVWcsWrapper
 
 
@@ -110,6 +111,24 @@ class PiffTooFewGoodStarsError(AlgorithmError):
 
 
 class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
+    modelType = pexConfig.ChoiceField[str](
+        doc="Piff model to use to describe the PSF at a single position. "
+        "Ignored if piffPsfConfigYaml is set.",
+        allowed=dict(
+            pixelGrid="Piff PixelGrid model.",
+            aipsf="Piff AIPSF model: a pre-trained convolutional autoencoder whose "
+                  "latent space is interpolated across the field. Requires "
+                  "aipsfModelFile to be set.",
+        ),
+        default="pixelGrid",
+    )
+    aipsfModelFile = pexConfig.Field[str](
+        doc="Path to the trained AIPSF checkpoint file (.pth), as written by the "
+        "Piff trainify executable. Required if modelType is 'aipsf'; ignored "
+        "otherwise.",
+        default=None,
+        optional=True,
+    )
     spatialOrderPerBand = pexConfig.DictField(
         doc="Per-band spatial order for PSF kernel creation. "
         "Ignored if piffPsfConfigYaml is set.",
@@ -240,6 +259,16 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default=None,
         optional=True,
     )
+    writeTrainingSet = pexConfig.Field[bool](
+        doc="Write a PSF training sample (star stamps, PSF model predictions, and "
+        "positions) via the trainingSample subtask after the PSF fit.",
+        default=False,
+    )
+    trainingSample = pexConfig.ConfigurableField(
+        target=PiffTrainingSampleTask,
+        doc="Subtask that writes the PSF training sample. Only used if "
+        "writeTrainingSet is True.",
+    )
 
     def setDefaults(self):
         super().setDefaults()
@@ -271,6 +300,42 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
                        f"Set stampSize >= {min_stamp_size}"
                        )
                 raise pexConfig.FieldValidationError(self.__class__.modelSize, self, msg)
+
+        if self.modelType == "aipsf" and self.piffPsfConfigYaml is None:
+            if not self.aipsfModelFile:
+                raise pexConfig.FieldValidationError(
+                    self.__class__.aipsfModelFile, self,
+                    "aipsfModelFile must be set when modelType is 'aipsf'.")
+            if self.samplingSize != 1:
+                raise pexConfig.FieldValidationError(
+                    self.__class__.samplingSize, self,
+                    "The AIPSF model has no internal resampling; samplingSize must be 1 "
+                    "when modelType is 'aipsf'.")
+            if self.stampSize != self.modelSize:
+                raise pexConfig.FieldValidationError(
+                    self.__class__.stampSize, self,
+                    "The AIPSF encoder requires stamps of exactly the model size; set "
+                    "stampSize == modelSize (the network grid_size, an odd integer) when "
+                    "modelType is 'aipsf'.")
+            if self.useColor:
+                raise pexConfig.FieldValidationError(
+                    self.__class__.useColor, self,
+                    "useColor is not supported with modelType 'aipsf': color enters the "
+                    "PSF model as an extra interpolation axis, but the Polynomial "
+                    "interpolation used for the AIPSF latent space only regresses "
+                    "against (u, v).  (BasisPolynomial, which supports extra keys, "
+                    "requires the basis-model chisq machinery that AIPSF does not "
+                    "have.)  Latent interpolators that regress against color (e.g. "
+                    "KNN/GP with color keys) are future work.")
+            if self.useCoordinates != "pixel":
+                raise pexConfig.FieldValidationError(
+                    self.__class__.useCoordinates, self,
+                    "Only useCoordinates 'pixel' is supported with modelType 'aipsf': "
+                    "the autoencoder encodes and decodes raw pixel stamps at a fixed "
+                    "pixel scale, and drawing the decoded stamp through a field or sky "
+                    "WCS would rotate/rescale the model relative to the stamps it was "
+                    "encoded from.  Resampling stamps into the interpolation frame is "
+                    "future work.")
 
 
 def getGoodPixels(maskedImage, zeroWeightMaskBits):
@@ -427,6 +492,9 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         self.piffLogger = lsst.utils.logging.getLogger(f"{self.log.name}.piff")
         self.piffLogger.setLevel(piffLoggingLevels[self.config.piffLoggingLevel])
 
+        if self.config.writeTrainingSet:
+            self.makeSubtask("trainingSample")
+
     def determinePsf(
         self, exposure, psfCandidateList, metadata=None, flagKey=None,
     ):
@@ -556,21 +624,39 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             orders.append(self.config.colorOrder)
 
         if self.config.piffPsfConfigYaml is None:
-            piffConfig = {
-                'type': 'Simple',
-                'model': {
+            if self.config.modelType == "pixelGrid":
+                model = {
                     'type': 'PixelGrid',
                     'scale': scale * self.config.samplingSize,
                     'size': self.config.modelSize,
                     'interp': self.config.interpolant,
                     'centered': self.config.piffPixelGridFitCenter,
-                },
-                'interp': {
+                }
+                interp = {
                     'type': 'BasisPolynomial',
                     'order': orders,
                     'keys': keys,
                     'solver': self.config.piffBasisPolynomialSolver,
-                },
+                }
+            else:  # aipsf
+                # No device is passed: inference runs on CPU (the AIPSF default).
+                model = {
+                    'type': 'AIPSF',
+                    'scale': scale,
+                    'model_file': self.config.aipsfModelFile,
+                }
+                # The AIPSF latent parameters are interpolated with Piff's
+                # Polynomial interpolation, which always regresses against the
+                # star (u, v) positions; it does not support the keys/solver
+                # machinery of BasisPolynomial.
+                interp = {
+                    'type': 'Polynomial',
+                    'order': spatialOrder,
+                }
+            piffConfig = {
+                'type': 'Simple',
+                'model': model,
+                'interp': interp,
                 'outliers': {
                     'type': 'Chisq',
                     'nsigma': self.config.outlierNSigma,
@@ -592,6 +678,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 freeParameters = ((nth_order + 1) * (nth_order + 2)) // 2
             return freeParameters
 
+        def _zeroth_order(interp_type):
+            # BasisPolynomial takes one order per interpolation key;
+            # Polynomial takes a single scalar order.
+            return [0] * len(keys) if interp_type == 'BasisPolynomial' else 0
+
         if piffConfig['interp']['type'] in ['BasisPolynomial', 'Polynomial']:
             threshold = _get_threshold(piffConfig['interp']['order'])
             if len(stars) < threshold:
@@ -600,7 +691,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         "Only %d stars found, "
                         "but %d required. Using zeroth order interpolation."%((len(stars), threshold))
                     )
-                    piffConfig['interp']['order'] = [0] * len(keys)
+                    piffConfig['interp']['order'] = _zeroth_order(piffConfig['interp']['type'])
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
@@ -626,7 +717,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         "Only %d after outlier rejection, "
                         "but %d required. Using zeroth order interpolation."%((nUsedStars, threshold))
                     )
-                    piffConfig['interp']['order'] = [0] * len(keys)
+                    piffConfig['interp']['order'] = _zeroth_order(piffConfig['interp']['type'])
                     # No need to do any outlier rejection assume
                     # PSF to be average of few stars.
                     piffConfig['max_iter'] = 1
@@ -639,7 +730,12 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                         poly_ndim=piffConfig['interp']['order'],
                     )
 
-        drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
+        if self.config.modelType == "aipsf":
+            # The AIPSF decoder always produces stamps of the network grid size,
+            # which validate() constrains to equal the stamp size.
+            drawSize = stampSize
+        else:
+            drawSize = 2*np.floor(0.5*stampSize/self.config.samplingSize) + 1
 
         used_image_starId = {s.data.properties['starId'] for s in piffResult.stars
                              if not s.is_flagged and not s.is_reserve}
@@ -652,6 +748,11 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 starId = source.getId()
                 if starId in used_image_starId:
                     source.set(flagKey, True)
+
+        # This must run before the star data cleanup below, since it needs the
+        # star images.
+        if self.config.writeTrainingSet:
+            self.trainingSample.run(piffResult, exposure, drawSize)
 
         if metadata is not None:
             metadata["spatialFitChi2"] = piffResult.chisq

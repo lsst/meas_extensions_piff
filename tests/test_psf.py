@@ -38,11 +38,18 @@ import lsst.afw.table as afwTable
 import lsst.daf.base as dafBase
 import lsst.geom as geom
 import lsst.meas.algorithms as measAlg
+import lsst.pex.config as pexConfig
 from lsst.pipe.base import AlgorithmError
 from lsst.meas.base import SingleFrameMeasurementTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import PiffPsfDeterminerConfig, PiffPsfDeterminerTask
 from lsst.meas.extensions.piff.piffPsfDeterminer import _validateGalsimInterpolant
 from packaging.version import Version
+
+# PyTorch is part of the Rubin conda environment, so it is always available here.
+import torch
+
+# The AIPSF model needs a piff version that provides it.
+HAVE_AIPSF = hasattr(piff, "AIPSF")
 
 
 def psfVal(ix, iy, x, y, sigma1, sigma2, b):
@@ -240,6 +247,10 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         useColor=False,
         colorOrder=0,
         withlog=False,
+        modelType="pixelGrid",
+        aipsfModelFile=None,
+        writeTrainingSet=False,
+        trainingSetLocation=None,
     ):
         """Setup the starSelector and psfDeterminer
 
@@ -266,6 +277,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             Whether to downsample the PSF candidates before modelling?
         withlog : `bool`, optional
             Should Piff produce chatty log messages?
+        modelType : `str`, optional
+            Piff model to use: "pixelGrid" or "aipsf".
+        aipsfModelFile : `str`, optional
+            Path to the trained AIPSF checkpoint file; only used if
+            ``modelType`` is "aipsf".
+        writeTrainingSet : `bool`, optional
+            Write a PSF training sample after the fit?
+        trainingSetLocation : `str`, optional
+            Directory for the training sample pickle files.
         """
         starSelectorClass = measAlg.sourceSelectorRegistry["objectSize"]
         starSelectorConfig = starSelectorClass.ConfigClass()
@@ -301,6 +321,13 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
 
         psfDeterminerConfig.colorOrder = colorOrder
         psfDeterminerConfig.useColor = useColor
+
+        psfDeterminerConfig.modelType = modelType
+        psfDeterminerConfig.aipsfModelFile = aipsfModelFile
+
+        psfDeterminerConfig.writeTrainingSet = writeTrainingSet
+        if trainingSetLocation is not None:
+            psfDeterminerConfig.trainingSample.trainingSetLocation = trainingSetLocation
 
         if piffPsfConfigYaml is None:
             self.useYaml = False
@@ -589,6 +616,170 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                                  colorOrder=0,
                                  piffPsfConfigYaml=None)
 
+    def testPiffDeterminer_trainingSample(self):
+        """Test that the trainingSample subtask writes the expected pickle file."""
+        import os
+        import pickle
+        import tempfile
+        import lsst.afw.cameraGeom as cameraGeom
+        from lsst.afw.cameraGeom.testUtils import DetectorWrapper
+
+        # The synthetic test exposure has no detector, visit info, or filter,
+        # which the training sample needs for the focal-plane transform and
+        # the output identifiers.
+        detector = DetectorWrapper().detector
+        self.exposure.setDetector(detector)
+        self.exposure.info.setVisitInfo(afwImage.VisitInfo(id=1234))
+        self.exposure.setFilter(afwImage.FilterLabel(band="r", physical="r_test"))
+
+        stampSize = 25
+        with tempfile.TemporaryDirectory() as trainingSetLocation:
+            self.setupDeterminer(
+                stampSize=stampSize,
+                writeTrainingSet=True,
+                trainingSetLocation=trainingSetLocation,
+            )
+            metadata = dafBase.PropertyList()
+
+            stars = self.starSelector.run(self.catalog, exposure=self.exposure)
+            psfCandidateList = self.makePsfCandidates.run(
+                stars.sourceCat,
+                exposure=self.exposure
+            ).psfCandidates
+
+            psf, cellSet = self.psfDeterminer.determinePsf(
+                self.exposure,
+                psfCandidateList,
+                metadata,
+                flagKey=self.usePsfFlag
+            )
+
+            fileName = os.path.join(
+                trainingSetLocation, f"1234_{detector.getId()}_r.pkl"
+            )
+            self.assertTrue(os.path.exists(fileName))
+            with open(fileName, "rb") as f:
+                trainingSample = pickle.load(f)
+
+            self.assertEqual(len(trainingSample), metadata['numGoodStars'])
+            pixelsToFocal = detector.getTransform(cameraGeom.PIXELS, cameraGeom.FOCAL_PLANE)
+            for starId, record in trainingSample.items():
+                self.assertTrue(starId.startswith(f"1234_{detector.getId()}_r_"))
+                self.assertEqual(
+                    set(record.keys()),
+                    {"star", "weight", "starPiff", "xCCD", "yCCD", "xFoV", "yFoV",
+                     "sumStar", "detector", "visit", "band"},
+                )
+                self.assertEqual(record["star"].shape, (stampSize, stampSize))
+                self.assertEqual(record["starPiff"].shape, (stampSize, stampSize))
+                self.assertEqual(record["star"].dtype, np.float32)
+                self.assertEqual(record["starPiff"].dtype, np.float32)
+                self.assertFloatsAlmostEqual(record["star"].sum(), 1.0, rtol=1e-5)
+                self.assertEqual(record["detector"], detector.getId())
+                self.assertEqual(record["visit"], 1234)
+                self.assertEqual(record["band"], "r")
+                focalPoint = pixelsToFocal.applyForward(
+                    geom.Point2D(record["xCCD"], record["yCCD"])
+                )
+                self.assertFloatsAlmostEqual(record["xFoV"], focalPoint.getX(), rtol=1e-12)
+                self.assertFloatsAlmostEqual(record["yFoV"], focalPoint.getY(), rtol=1e-12)
+
+            # The determiner still returns a valid PSF; writing the training
+            # sample is not exclusive with a science fit.
+            self.exposure.setPsf(psf)
+            image = psf.computeKernelImage(self.exposure.getBBox().getCenter())
+            self.assertTrue(np.all(np.isfinite(image.array)))
+
+    @unittest.skipUnless(HAVE_AIPSF, "this piff version does not provide AIPSF")
+    def testPiffDeterminer_aipsf(self):
+        """Test the AIPSF model path with a small random-weight network.
+
+        The network weights are random, so this checks the mechanics of the
+        fit (latent encoding, Polynomial interpolation of the latent space,
+        drawing, and persistence), not the quality of the PSF model.
+        """
+        with lsst.utils.tests.getTempFilePath(".pth") as modelFile:
+            torch.manual_seed(1234)
+            net = piff.aimodels.Conv2dAutoEncoder(grid_size=25, latent_dim=4, hidden_channels=2)
+            net.eval()
+            piff.aimodels.save_checkpoint(net, modelFile)
+
+            self.setupDeterminer(
+                stampSize=25,
+                modelSize=25,
+                spatialOrder=1,
+                modelType="aipsf",
+                aipsfModelFile=modelFile,
+            )
+            metadata = dafBase.PropertyList()
+
+            stars = self.starSelector.run(self.catalog, exposure=self.exposure)
+            psfCandidateList = self.makePsfCandidates.run(
+                stars.sourceCat,
+                exposure=self.exposure
+            ).psfCandidates
+
+            psf, cellSet = self.psfDeterminer.determinePsf(
+                self.exposure,
+                psfCandidateList,
+                metadata,
+                flagKey=self.usePsfFlag
+            )
+
+            self.assertEqual(self.psfDeterminer._piffConfig['model']['type'], 'AIPSF')
+            self.assertEqual(self.psfDeterminer._piffConfig['interp']['type'], 'Polynomial')
+
+            self.exposure.setPsf(psf)
+
+            # For the AIPSF model the drawn kernel has the stamp size.
+            self.assertEqual(
+                psf.computeKernelImage(self.exposure.getBBox().getCenter()).getDimensions(),
+                geom.Extent2I(25, 25),
+            )
+
+            self.assertEqual(metadata['numAvailStars'], len(psfCandidateList))
+            self.assertLessEqual(metadata['numGoodStars'], metadata['numAvailStars'])
+            self.assertEqual(
+                psf.getAveragePosition(),
+                geom.Point2D(
+                    np.mean([s.x for s in psf._piffResult.stars
+                             if not s.is_flagged and not s.is_reserve]),
+                    np.mean([s.y for s in psf._piffResult.stars
+                             if not s.is_flagged and not s.is_reserve])
+                )
+            )
+
+            # The PSF images are all finite and normalized-ish.
+            for point in [
+                psf.getAveragePosition(),
+                geom.Point2D(),
+                geom.Point2D(1, 1)
+            ]:
+                image = psf.computeKernelImage(point)
+                self.assertTrue(np.all(np.isfinite(image.array)))
+                self.assertEqual(
+                    psf.computeBBox(point),
+                    image.getBBox()
+                )
+
+            # Persistence roundtrips.
+            with lsst.utils.tests.getTempFilePath(".fits") as tmpFile:
+                self.exposure.writeFits(tmpFile)
+                fitsIm = afwImage.ExposureF(tmpFile)
+                copyIm = copy.deepcopy(self.exposure)
+
+                for newIm in [fitsIm, copyIm]:
+                    for point in [
+                        geom.Point2D(0, 0),
+                        geom.Point2D(10, 100),
+                        geom.Point2D(-200, 30),
+                        geom.Point2D(float("nan"))  # "nullPoint"
+                    ]:
+                        self.assertImagesAlmostEqual(
+                            psf.computeImage(point),
+                            newIm.getPsf().computeImage(point)
+                        )
+
 
 class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):
     """A test case to trigger the codepath that uses piffPsfConfigYaml."""
@@ -637,6 +828,61 @@ class PiffConfigTestCase(lsst.utils.tests.TestCase):
             self.assertFalse(_validateGalsimInterpolant(interp))
             self.assertTrue(_validateGalsimInterpolant(f"galsim.{interp}"))
             self.assertTrue(eval(f"galsim.{interp}"))
+
+    def _makeAipsfConfig(self):
+        """Make a config with a valid aipsf setup."""
+        config = PiffPsfDeterminerConfig()
+        config.modelType = "aipsf"
+        config.aipsfModelFile = "some_checkpoint.pth"
+        config.stampSize = 25
+        config.modelSize = 25
+        return config
+
+    def testValidateAipsfConfig(self):
+        # A consistent aipsf config validates.  (The checkpoint file existence
+        # is only checked at runtime, so no torch is needed here.)
+        config = self._makeAipsfConfig()
+        config.validate()
+
+        # aipsfModelFile is required with modelType='aipsf'.
+        config = self._makeAipsfConfig()
+        config.aipsfModelFile = None
+        with self.assertRaises(pexConfig.FieldValidationError):
+            config.validate()
+
+        # The stamp size must equal the model size.
+        config = self._makeAipsfConfig()
+        config.stampSize = 27
+        with self.assertRaises(pexConfig.FieldValidationError):
+            config.validate()
+
+        # No internal resampling with aipsf.
+        config = self._makeAipsfConfig()
+        config.samplingSize = 0.5
+        with self.assertRaises(pexConfig.FieldValidationError):
+            config.validate()
+
+        # Color is not supported with aipsf (the Polynomial latent interpolation
+        # cannot regress against color).
+        config = self._makeAipsfConfig()
+        config.useColor = True
+        with self.assertRaises(pexConfig.FieldValidationError):
+            config.validate()
+
+        # Only pixel coordinates are supported with aipsf (the autoencoder
+        # operates on raw pixel stamps).
+        for useCoordinates in ("field", "sky"):
+            config = self._makeAipsfConfig()
+            config.useCoordinates = useCoordinates
+            with self.assertRaises(pexConfig.FieldValidationError):
+                config.validate()
+
+        # The aipsf constraints do not apply when a piffPsfConfigYaml overrides
+        # the model configuration.
+        config = self._makeAipsfConfig()
+        config.aipsfModelFile = None
+        config.piffPsfConfigYaml = "{type: Simple}"
+        config.validate()
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
