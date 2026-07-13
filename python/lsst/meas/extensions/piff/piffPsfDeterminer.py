@@ -764,9 +764,15 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                                         if not s.is_flagged and not s.is_reserve])
 
         if not self.config.debugStarData:
+            # For the AIPSF model, fit.params are the latent-space encodings:
+            # the model product itself (a few hundred bytes per star), kept for
+            # downstream tasks (e.g. finalizeCharacterization writes them to
+            # the output table).
+            keepParams = self.config.modelType == "aipsf"
             for star in piffResult.stars:
                 # Remove large data objects from the stars
-                del star.fit.params
+                if not keepParams:
+                    del star.fit.params
                 del star.fit.params_var
                 del star.fit.A
                 del star.fit.b

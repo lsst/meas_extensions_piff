@@ -769,6 +769,19 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             self.assertEqual(self.psfDeterminer._piffConfig['model']['type'], 'AIPSF')
             self.assertEqual(self.psfDeterminer._piffConfig['interp']['type'], 'Polynomial')
 
+            # For AIPSF, the latent encodings (fit.params) are kept through the
+            # star-data cleanup, and fit() stored the per-star (a, b) nuisance
+            # parameters; the large data objects are still removed.
+            usedStars = [s for s in psf._piffResult.stars
+                         if not s.is_flagged and not s.is_reserve]
+            self.assertGreater(len(usedStars), 0)
+            for s in usedStars:
+                self.assertEqual(len(s.fit.params), 4)
+                self.assertTrue(np.all(np.isfinite(s.fit.params)))
+                self.assertIn('aipsf_a', s.data.properties)
+                self.assertIn('aipsf_b', s.data.properties)
+            self.assertNotIn('image', psf._piffResult.stars[0].data.__dict__)
+
             self.exposure.setPsf(psf)
 
             # For the AIPSF model the drawn kernel has the stamp size.
