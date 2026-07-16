@@ -129,6 +129,18 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         default=None,
         optional=True,
     )
+    aipsfBackgroundFitMode = pexConfig.ChoiceField[str](
+        doc="Mode of the per-star amplitude+background diagnostic fit stored by "
+        "the AIPSF model in the star properties ('aipsf_a'/'aipsf_b'). Should "
+        "match the fit_background_mode used at training. Only used if modelType "
+        "is 'aipsf'.",
+        allowed=dict(
+            free="Fit the amplitude and the background as two free parameters.",
+            normalized="One-parameter fit with the amplitude tied to the "
+                       "background by the stamp sum (a = sum(data) - Npix*b).",
+        ),
+        default="free",
+    )
     spatialOrderPerBand = pexConfig.DictField(
         doc="Per-band spatial order for PSF kernel creation. "
         "Ignored if piffPsfConfigYaml is set.",
@@ -644,6 +656,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                     'type': 'AIPSF',
                     'scale': scale,
                     'model_file': self.config.aipsfModelFile,
+                    'background_fit_mode': self.config.aipsfBackgroundFitMode,
                 }
                 # The AIPSF latent parameters are interpolated with Piff's
                 # Polynomial interpolation, which always regresses against the

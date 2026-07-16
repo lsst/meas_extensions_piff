@@ -767,6 +767,8 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             )
 
             self.assertEqual(self.psfDeterminer._piffConfig['model']['type'], 'AIPSF')
+            self.assertEqual(self.psfDeterminer._piffConfig['model']['background_fit_mode'],
+                             'free')
             self.assertEqual(self.psfDeterminer._piffConfig['interp']['type'], 'Polynomial')
 
             # For AIPSF, the latent encodings (fit.params) are kept through the
