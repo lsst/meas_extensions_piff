@@ -782,6 +782,12 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                 self.assertTrue(np.all(np.isfinite(s.fit.params)))
                 self.assertIn('aipsf_a', s.data.properties)
                 self.assertIn('aipsf_b', s.data.properties)
+                # The measured (encoder) latents are kept as properties, so
+                # finalizeCharacterization can compare them to the interpolated
+                # fit.params.
+                for j in range(4):
+                    self.assertIn(f'aipsf_zmeas_{j}', s.data.properties)
+                    self.assertTrue(np.isfinite(s.data.properties[f'aipsf_zmeas_{j}']))
             self.assertNotIn('image', psf._piffResult.stars[0].data.__dict__)
 
             self.exposure.setPsf(psf)
