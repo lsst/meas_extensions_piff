@@ -190,8 +190,9 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
         itemtype=str,
     )
     colorOrder = pexConfig.Field[int](
-        doc="Color order for PSF kernel creation. "
-        "Ignored if piffPsfConfigYaml is set.",
+        doc="Color order for PSF kernel creation. Only pure color terms are "
+        "fitted; cross terms between color and spatial coordinates are "
+        "not included. Ignored if piffPsfConfigYaml is set.",
         default=1,
     )
     interpolant = pexConfig.Field[str](
@@ -578,6 +579,21 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 },
                 'max_iter': self.config.piffMaxIter
             }
+            if self.config.useColor:
+                # Cross terms between the two spatial coordinates are kept up
+                # to spatialOrder. Cross terms between color and the spatial
+                # coordinates are set to zero, i.e. only pure color terms up
+                # to colorOrder are fitted, so the basis is e.g.
+                # [1, c, y, y^2, x, x*y, x^2] for spatialOrder=2, colorOrder=1.
+                #
+                # In Piff's BasisPolynomial, a pair of keys omitted from the
+                # max_order dict gets no cross terms. The color/spatial pairs
+                # must be omitted rather than listed with an explicit 0:
+                # Piff <= 1.7 indexes dict pairs within the pair tuple instead
+                # of within `keys`, so an explicit ('x', 'colorValue'): 0
+                # entry would also remove the x*y term.
+                spatialKeys = (keys[0], keys[1])
+                piffConfig['interp']['max_order'] = {spatialKeys: spatialOrder}
         else:
             piffConfig = yaml.safe_load(self.config.piffPsfConfigYaml)
 
