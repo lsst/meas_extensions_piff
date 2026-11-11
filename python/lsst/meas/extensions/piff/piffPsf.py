@@ -49,21 +49,32 @@ class PiffPsf(ImagePsf):
         self._averageColor = None
         self.log = log or logging.getLogger(__name__)
 
-        try:
-            color_type = [s.data.properties['colorType'] for s in self._piffResult.stars
-                          if not s.is_flagged and not s.is_reserve]
-            color_type = list(set(color_type))
-            if len(color_type) > 1:
-                self.log.warning(f"More than one color type was given during training: {color_type}")
+        self._color_type = None
+        if self.hasColor:
+            try:
+                color_type = [s.data.properties['colorType'] for s in self._piffResult.stars
+                              if not s.is_flagged and not s.is_reserve]
+                color_type = list(set(color_type))
+                if len(color_type) > 1:
+                    self.log.warning(f"More than one color type was given during training: {color_type}")
+                else:
+                    self._color_type = color_type[0]
+            except Exception:
                 self._color_type = None
-            else:
-                self._color_type = color_type[0]
-        except Exception:
-            self._color_type = None
 
     @property
     def piffResult(self):
         return self._piffResult
+
+    @property
+    def hasColor(self):
+        """Whether this PSF model has a color dependence (`bool`).
+
+        True if ``colorValue`` was one of the interpolation keys of the Piff
+        fit, i.e. the chromatic fit was actually done. When False, any color
+        passed to the ``compute*`` methods is ignored.
+        """
+        return 'colorValue' in self._piffResult.interp_property_names
 
     # Storable overrides
 
@@ -125,7 +136,7 @@ class PiffPsf(ImagePsf):
 
     def getAverageColor(self):
         if self._averageColor is None:
-            if 'colorValue' in self._piffResult.interp_property_names:
+            if self.hasColor:
                 c = np.nanmean([s.data.properties['colorValue'] for s in self._piffResult.stars
                                 if not s.is_flagged and not s.is_reserve])
                 self._averageColor = Color(colorValue=c, colorType=self._color_type)
@@ -139,7 +150,7 @@ class PiffPsf(ImagePsf):
         # Follow Piff conventions for center.
         # None => draw as if star at position
         # True => draw in center of image
-        if 'colorValue' in self._piffResult.interp_property_names:
+        if self.hasColor:
             if color is None or color.isIndeterminate():
                 meanColor = np.nan
                 if self._averageColor is None:
