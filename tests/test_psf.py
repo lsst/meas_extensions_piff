@@ -239,6 +239,7 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         downsample=False,
         useColor=False,
         colorOrder=0,
+        withColorInformation=True,
         withlog=False,
     ):
         """Setup the starSelector and psfDeterminer
@@ -264,6 +265,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             Configuration file for PIFF in YAML format.
         downsample : `bool`, optional
             Whether to downsample the PSF candidates before modelling?
+        useColor : `bool`, optional
+            Fit a color dependence of the PSF?
+        colorOrder : `int`, optional
+            Polynomial order of the color dependence.
+        withColorInformation : `bool`, optional
+            Set a color on every PSF candidate before fitting? If False the
+            candidates keep their default (NaN) color, which must make the
+            determiner fall back to a non-chromatic fit even if ``useColor``
+            is True. Unused here; consumed by ``checkPiffDeterminer``.
         withlog : `bool`, optional
             Should Piff produce chatty log messages?
         """
@@ -353,9 +363,20 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             exposure=self.exposure
         ).psfCandidates
 
-        for psf in psfCandidateList:
-            psf.setPsfColorValue(0.42)
-            psf.setPsfColorType("g-r")
+        withColorInformation = kwargs.get("withColorInformation", True)
+        if withColorInformation:
+            for psf in psfCandidateList:
+                psf.setPsfColorValue(0.42)
+                psf.setPsfColorType("g-r")
+
+        # The chromatic fit is only done when it is requested, color
+        # information is available, and the Piff config is not overridden by
+        # a yaml config (which never fits color here).
+        expectedHasColor = (
+            kwargs.get("useColor", False)
+            and withColorInformation
+            and kwargs.get("piffPsfConfigYaml", None) is None
+        )
 
         logger = logging.getLogger("lsst.psfDeterminer.Piff")
 
@@ -366,8 +387,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
             log_level = logging.WARNING
             log_regex = "WARNING:.*:Iteration"
 
+        # Both the zeroth-order fallback and the no-color-information
+        # fallback log a warning, so do not forbid warnings in those cases.
+        expectWarning = (
+            kwargs.get("zerothOrderInterpNotEnoughStars", False)
+            or (kwargs.get("useColor", False) and not withColorInformation)
+        )
+
         with self.assertLogs("lsst.psfDeterminer.Piff.piff", log_level) as cm:
-            if kwargs.get("zerothOrderInterpNotEnoughStars", False):
+            if expectWarning:
                 psf, cellSet = self.psfDeterminer.determinePsf(
                     self.exposure,
                     psfCandidateList,
@@ -411,6 +439,15 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.assertEqual(metadata['numAvailStars'], numAvail)
         self.assertEqual(sum(self.catalog['use_psf']), metadata['numGoodStars'])
         self.assertLessEqual(metadata['numGoodStars'], metadata['numAvailStars'])
+
+        # Check that the PSF reports whether the chromatic fit was done.
+        self.assertEqual(psf.hasColor, expectedHasColor)
+        self.assertEqual(metadata['psfHasColor'], expectedHasColor)
+        if expectedHasColor:
+            self.assertEqual(psf.getAverageColor().getColorType(), "g-r")
+            self.assertFalse(psf.getAverageColor().isIndeterminate())
+        else:
+            self.assertTrue(psf.getAverageColor().isIndeterminate())
 
         self.assertEqual(
             psf.getAveragePosition(),
@@ -473,6 +510,9 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
                     psf.computeImage(psf.getAveragePosition()),
                     newPsf.computeImage(newPsf.getAveragePosition())
                 )
+                # hasColor is derived from the Piff result, so it must
+                # survive persistence and copies.
+                self.assertEqual(newPsf.hasColor, psf.hasColor)
 
     def testReadOldPiffVersions(self):
         """Test we can read psfs serialized with older versions of Piff."""
@@ -588,6 +628,27 @@ class SpatialModelPsfTestCase(lsst.utils.tests.TestCase):
         self.checkPiffDeterminer(useColor=True,
                                  colorOrder=0,
                                  piffPsfConfigYaml=None)
+        if not self.useYaml:
+            self.assertTrue(self.exposure.getPsf().hasColor)
+            interp = self.psfDeterminer._piffConfig['interp']
+            self.assertEqual(interp['keys'], ['x', 'y', 'colorValue'])
+            self.assertIn('max_order', interp)
+
+    def testPiffColorfitNoColorInformation(self):
+        """Test that useColor=True without any color information on the
+        candidates falls back to a non-chromatic fit instead of fitting
+        a color dependence with all colors set to zero.
+        """
+        self.checkPiffDeterminer(useColor=True,
+                                 colorOrder=0,
+                                 piffPsfConfigYaml=None,
+                                 withColorInformation=False)
+        self.assertFalse(self.exposure.getPsf().hasColor)
+        if not self.useYaml:
+            interp = self.psfDeterminer._piffConfig['interp']
+            self.assertEqual(interp['keys'], ['x', 'y'])
+            self.assertEqual(interp['order'], [1, 1])
+            self.assertNotIn('max_order', interp)
 
 
 class piffPsfConfigYamlTestCase(SpatialModelPsfTestCase):
