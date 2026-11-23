@@ -178,7 +178,9 @@ class PiffPsfDeterminerConfig(BasePsfDeterminerTask.ConfigClass):
     )
     useColor = pexConfig.Field[bool](
         doc="Use color information to correct for amtospheric turbulences and "
-            "differential chromatic refraction."
+            "differential chromatic refraction. If no PSF candidate carries a "
+            "finite color, color is not fitted and a purely spatial PSF model "
+            "is produced (see ``PiffPsf.hasColor``). "
             "Ignored if piffPsfConfigYaml is set.",
         default=False,
     )
@@ -534,27 +536,32 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
         spatialOrder = self.config.spatialOrderPerBand.get(band, self.config.spatialOrder)
         orders = [spatialOrder] * len(keys)
 
+        # Whether the chromatic fit is actually done. It requires useColor
+        # and at least one PSF candidate with a finite color.
+        fitColor = False
         if self.config.useColor:
             colors = [s.data.properties['colorValue'] for s in stars
                       if np.isfinite(s.data.properties['colorValue'])]
             colorTypes = [s.data.properties['colorType'] for s in stars
                           if np.isfinite(s.data.properties['colorValue'])]
             if len(colors) == 0:
-                self.log.warning("No color informations for PSF candidates, Set PSF colors to 0s.")
-                meanColors = 0.
-                colorTypes = [stars[0].data.properties['colorType']]
+                self.log.warning(
+                    "useColor is True but no PSF candidate has color information; "
+                    "fitting a non-chromatic PSF (no color dependence)."
+                )
             else:
+                fitColor = True
                 meanColors = np.mean(colors)
-            colorType = list(set(colorTypes))
-            if len(colorType) > 1:
-                raise ValueError(f"More than one colorType was provided:{colorType}")
-            colorType = colorType[0]
-            for s in stars:
-                if not np.isfinite(s.data.properties['colorValue']):
-                    s.data.properties['colorValue'] = meanColors
-                    s.data.properties['colorType'] = colorType
-            keys.append('colorValue')
-            orders.append(self.config.colorOrder)
+                colorType = list(set(colorTypes))
+                if len(colorType) > 1:
+                    raise ValueError(f"More than one colorType was provided:{colorType}")
+                colorType = colorType[0]
+                for s in stars:
+                    if not np.isfinite(s.data.properties['colorValue']):
+                        s.data.properties['colorValue'] = meanColors
+                        s.data.properties['colorType'] = colorType
+                keys.append('colorValue')
+                orders.append(self.config.colorOrder)
 
         if self.config.piffPsfConfigYaml is None:
             piffConfig = {
@@ -579,7 +586,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
                 },
                 'max_iter': self.config.piffMaxIter
             }
-            if self.config.useColor:
+            if fitColor:
                 # Cross terms between the two spatial coordinates are kept up
                 # to spatialOrder. Cross terms between color and the spatial
                 # coordinates are set to zero, i.e. only pure color terms up
@@ -673,6 +680,7 @@ class PiffPsfDeterminerTask(BasePsfDeterminerTask):
             metadata["spatialFitChi2"] = piffResult.chisq
             metadata["numAvailStars"] = len(stars)
             metadata["numGoodStars"] = nUsedStars
+            metadata["psfHasColor"] = fitColor
             metadata["avgX"] = np.mean([s.x for s in piffResult.stars
                                         if not s.is_flagged and not s.is_reserve])
             metadata["avgY"] = np.mean([s.y for s in piffResult.stars
